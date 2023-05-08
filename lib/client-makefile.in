@@ -21,8 +21,6 @@ srcdir = @srcdir@
 VPATH = @srcdir@
 srcdirpfx = @srcdirpfx@
 
-GSC_BOOT ?= @SETDLPATHBOOT@ $(rootfromhere)/gsc-boot
-
 C_COMPILER = @C_COMPILER_MF@
 C_PREPROC = @C_PREPROC_MF@
 FLAGS_OBJ = @FLAGS_OBJ_MF@
@@ -161,10 +159,9 @@ DISTFILES = $(RCFILES) $(GENDISTFILES)
 
 INSTFILES_LIB_DATA = $(LIBRARIES_SCM) $(GAMBIT_LIBS)
 
-GAMBITDIR_INCLUDE = $(rootfromhere)/include
+GAMBITDIR_INCLUDE ?= .
 GAMBIT_H = $(GAMBITDIR_INCLUDE)/gambit.h
 STAMP_H = $(GAMBITDIR_INCLUDE)/stamp.h
-CONFIG_H = $(GAMBITDIR_INCLUDE)/config.h
 
 GAMBITDIR_LIB = $(rootfromhere)/lib
 GAMBITDIR_LIB_GSI = $(rootfromhere)/gsi
@@ -174,7 +171,7 @@ BUILD_OBJ_OUTPUT_FILENAME_PARAM = $*@obj@
 BUILD_OBJ_CC_OPTIONS_PARAM =  -I$(srcdir) $(DEFS) $(GAMBITLIB_DEFS) -D___PRIMAL
 BUILD_OBJ_INPUT_FILENAMES_PARAM = $(srcdirpfx)$*.c
 
-PRELUDE_OPT = -prelude "@RTLIB_COND_EXPAND_FEATURES@(\#\#include\"$(srcdirpfx)/header.scm\")"
+PRELUDE_OPT = -prelude "@RTLIB_COND_EXPAND_FEATURES@(\#\#include\"$(srcdirpfx)../lib/header.scm\")"
 
 all: core
 
@@ -184,23 +181,6 @@ core-pre: $(LIBRARY) $(GAMBIT_LIBS)
 
 core-post:
 	$(MAKE) deselect-gen-for-commit-post-nonrec
-
-.scm.c:
-	$(GSC_BOOT) -:~~bin=$(srcdirpfx)$(rootfromhere)/bin,~~lib=$(srcdirpfx)$(rootfromhere)/lib,~~include=$(srcdirpfx)$(rootfromhere)/include -f -c @COMPILATION_OPTIONS@ $(PRELUDE_OPT) $(srcdirpfx)$*.scm
-
-# utile pour le bundling
-modules-c : $(MODULES_C)
-
-libgambit-bundle: $(MODULES_C) $(STAMP_H)
-	$(eval TMP := $(shell mktemp -d))
-	cp -r ./ $(TMP)
-	cp $(STAMP_H) $(TMP)
-	cp $(STAMP_H) $(TMP)/stamp-release.h
-	cp $(GAMBIT_H) $(TMP)
-	cp $(CONFIG_H) $(TMP)
-	rm $(TMP)/makefile
-	cd $(TMP); mv client-makefile makefile
-
 
 phase1: $(MODULES_C_IN_COMPILE_ORDER) $(GAMBIT_LIB_C)
 
@@ -226,9 +206,6 @@ univ-libs: $(UNIVLIB) $(MODULES_SCM)
 	done
 
 GAMBIT_LIB_C: $(GAMBIT_LIB_C)
-
-$(GAMBIT_LIB_C): $(MODULES_C)
-	$(GSC_BOOT) -:~~bin=$(srcdirpfx)$(rootfromhere)/bin,~~lib=$(srcdirpfx)$(rootfromhere)/lib,~~include=$(srcdirpfx)$(rootfromhere)/include -f -warnings -link -flat -o $@ -preload $(MODULES_C)
 
 GAMBIT_LIB_java: $(GAMBIT_LIB_java)
 
@@ -259,46 +236,6 @@ GAMBIT_LIB_go: $(GAMBIT_LIB_go)
 
 $(GAMBIT_LIB_go): $(UNIVLIB) $(MODULES_SCM)
 	@SETDLPATH@ $(rootfromhere)/gsc/gsc@exe@ -:~~bin=$(srcdirpfx)$(rootfromhere)/bin,~~lib=$(srcdirpfx)$(rootfromhere)/lib,~~include=$(srcdirpfx)$(rootfromhere)/include -f -target go @COMPILATION_OPTIONS@ $(PRELUDE_OPT) -c -o $@ $(srcdirpfx)$(rootfromhere)/lib/_univlib.scm
-
-$(GAMBIT_LIB_java) $(GAMBIT_LIB_js) $(GAMBIT_LIB_php) $(GAMBIT_LIB_python) $(GAMBIT_LIB_ruby) $(GAMBIT_LIB_go): \
-$(srcdirpfx)$(rootfromhere)/lib/_univlib.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_kernel.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_system.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_num.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_std.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_eval.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_module.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_io.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_nonstd.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_thread.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_repl.scm
-
-$(GAMBIT_LIB_java) $(GAMBIT_LIB_js) $(GAMBIT_LIB_php) $(GAMBIT_LIB_python) $(GAMBIT_LIB_ruby) $(GAMBIT_LIB_go) $(MODULES_C): \
-$(srcdirpfx)$(rootfromhere)/lib/header.scm \
-$(srcdirpfx)$(rootfromhere)/lib/gambit\#.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_gambit\#.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_kernel\#.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_system\#.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_num\#.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_std\#.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_eval\#.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_module\#.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_io\#.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_nonstd\#.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_thread\#.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_repl\#.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_define-syntax.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_syntax-boot.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_syntax-case-xform-boot.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_syntax-case-xform.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_syntax-common.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_syntax-pattern.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_syntax-rules-xform.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_syntax-template.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_syntax-xform-boot.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_syntax-xform.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_syntax.scm \
-$(srcdirpfx)$(rootfromhere)/lib/_with-syntax-boot.scm
 
 $(MODULES_O) $(NORMAL_O): $(GAMBIT_H)
 

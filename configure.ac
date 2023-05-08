@@ -3540,6 +3540,7 @@ makefile \
 include/makefile \
 include/gambit.h \
 lib/makefile \
+lib/client-makefile \
 lib/module-common.mk \
 $RTLIBMAKEFILES \
 gsi/makefile \
