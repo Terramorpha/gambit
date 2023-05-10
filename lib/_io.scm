@@ -1046,17 +1046,22 @@
             (else
              (error-improper-list))))))
 
-(##define-macro (macro-stream-options-output-shift) 32768)
+(##define-macro (macro-stream-options-output-shift) 15)
+(##define-macro (macro-stream-options-input-mask) 32767)
 
 (define-prim (##psettings->roptions psettings default-options)
   (##psettings-options->options
    (macro-psettings-roptions psettings)
-   (##fxmodulo default-options (macro-stream-options-output-shift))))
+   (##fxand
+    default-options
+    (macro-stream-options-input-mask))))
 
 (define-prim (##psettings->woptions psettings default-options)
   (##psettings-options->options
    (macro-psettings-woptions psettings)
-   (##fxquotient default-options (macro-stream-options-output-shift))))
+   (##fxwraplogical-shift-right
+    default-options
+    (macro-stream-options-output-shift))))
 
 (define-prim (##psettings->input-readtable psettings)
   (or (macro-psettings-options-readtable
@@ -1081,45 +1086,52 @@
          (macro-psettings-options-char-encoding-errors options)))
     (##fx+
      (##fx+
-      (##fx* (macro-char-encoding-shift)
-             (if (##fx= char-encoding (macro-default-char-encoding))
-                 (##fxmodulo
-                  (##fxquotient default-options
-                                (macro-char-encoding-shift))
-                  (macro-char-encoding-range))
-                 char-encoding))
-      (##fx* (macro-char-encoding-errors-shift)
-             (if (##fx= char-encoding-errors (macro-default-char-encoding-errors))
-                 (##fxmodulo
-                  (##fxquotient default-options
-                                (macro-char-encoding-errors-shift))
-                  (macro-char-encoding-errors-range))
-                 char-encoding-errors))
+      (##fxarithmetic-shift-left
+       (if (##fx= char-encoding (macro-default-char-encoding))
+           (##fxarithmetic-shift-right
+            (##fxand
+             default-options
+             (macro-char-encoding-mask))
+            (macro-char-encoding-shift))
+           char-encoding)
+       (macro-char-encoding-shift))
+      (##fxarithmetic-shift-left
+       (if (##fx= char-encoding-errors (macro-default-char-encoding-errors))
+           (##fxarithmetic-shift-right
+            (##fxand
+             default-options
+             (macro-char-encoding-errors-mask))
+            (macro-char-encoding-errors-shift))
+           char-encoding-errors)
+       (macro-char-encoding-errors-shift))
       (##fx+
        (##fx+
-        (##fx* (macro-eol-encoding-shift)
-               (if (##fx= eol-encoding (macro-default-eol-encoding))
-                   (##fxmodulo
-                    (##fxquotient default-options
-                                  (macro-eol-encoding-shift))
-                    (macro-eol-encoding-range))
-                   eol-encoding))
+        (##fxarithmetic-shift-left
+         (if (##fx= eol-encoding (macro-default-eol-encoding))
+             (##fxarithmetic-shift-right
+              (##fxand
+               default-options
+               (macro-eol-encoding-mask))
+              (macro-eol-encoding-shift))
+             eol-encoding)
+         (macro-eol-encoding-shift))
         (##fx+
-         (##fx* (macro-open-state-shift)
-                (##fxmodulo
-                 (##fxquotient default-options
-                               (macro-open-state-shift))
-                 (macro-open-state-range)))
+         (##fxand
+          default-options
+          (macro-open-state-mask))
          (##fx+
-          (##fx* (macro-permanent-close-shift)
-                 permanent-close)
-          (##fx* (macro-buffering-shift)
-                 (if (##fx= buffering (macro-default-buffering))
-                     (##fxmodulo
-                      (##fxquotient default-options
-                                    (macro-buffering-shift))
-                      (macro-buffering-range))
-                     buffering))))))))))
+          (##fxarithmetic-shift-left
+           permanent-close
+           (macro-permanent-close-shift))
+          (##fxarithmetic-shift-left
+           (if (##fx= buffering (macro-default-buffering))
+               (##fxarithmetic-shift-right
+                (##fxand
+                 default-options
+                 (macro-buffering-mask))
+                (macro-buffering-shift))
+               buffering)
+           (macro-buffering-shift))))))))))
 
 (define-prim (##psettings->device-flags psettings)
   (let ((direction
@@ -1131,30 +1143,34 @@
         (truncate
          (macro-psettings-truncate psettings)))
     (##fx+
-     (##fx* (macro-direction-shift)
-            direction)
+     (##fxarithmetic-shift-left
+      direction
+      (macro-direction-shift))
      (##fx+
-      (##fx* (macro-append-shift)
-             (if (##not (##fx= append (macro-default-append)))
-                 append
-                 (macro-no-append)))
+      (##fxarithmetic-shift-left
+       (if (##not (##fx= append (macro-default-append)))
+           append
+           (macro-no-append))
+       (macro-append-shift))
       (##fx+
-       (##fx* (macro-create-shift)
-              (cond ((##not (##fx= create (macro-default-create)))
-                     create)
-                    ((##fx= direction (macro-direction-out))
-                     (macro-maybe-create))
-                    (else
-                     (macro-no-create))))
-       (##fx* (macro-truncate-shift)
-              (cond ((##not (##fx= truncate (macro-default-truncate)))
-                     truncate)
-                    ((##fx= direction (macro-direction-out))
-                     (if (##fx= append (macro-append))
-                         (macro-no-truncate)
-                         (macro-truncate)))
-                    (else
-                     (macro-no-truncate)))))))))
+       (##fxarithmetic-shift-left
+        (cond ((##not (##fx= create (macro-default-create)))
+               create)
+              ((##fx= direction (macro-direction-out))
+               (macro-maybe-create))
+              (else
+               (macro-no-create)))
+        (macro-create-shift))
+       (##fxarithmetic-shift-left
+        (cond ((##not (##fx= truncate (macro-default-truncate)))
+               truncate)
+              ((##fx= direction (macro-direction-out))
+               (if (##fx= append (macro-append))
+                   (macro-no-truncate)
+                   (macro-truncate)))
+              (else
+               (macro-no-truncate)))
+        (macro-truncate-shift)))))))
 
 (define-prim (##psettings->permissions psettings default-permissions)
   (let ((permissions (macro-psettings-permissions psettings)))
@@ -3282,12 +3298,14 @@
   (##psettings-options->options
    options
    (##fx+
-    (##fx* (macro-open-state-shift)
-           (if (##fx= kind (macro-none-kind))
-               (macro-open-state-closed)
-               (macro-open-state-open)))
-    (##fx* (macro-buffering-shift)
-           buffering))))
+    (##fxarithmetic-shift-left
+     (if (##fx= kind (macro-none-kind))
+         (macro-open-state-closed)
+         (macro-open-state-open))
+     (macro-open-state-shift))
+    (##fxarithmetic-shift-left
+     buffering
+     (macro-buffering-shift)))))
 
 ;;;----------------------------------------------------------------------------
 
@@ -6690,8 +6708,9 @@
               (macro-port-woptions port))
              (woptions
               (##psettings->woptions psettings
-                                     (##fx* old-woptions
-                                            (macro-stream-options-output-shift)))))
+                                     (##fxarithmetic-shift-left
+                                      old-woptions
+                                      (macro-stream-options-output-shift)))))
         (let ((code
                (and (macro-output-port? port)
                     (##not (##fx= woptions old-woptions))
@@ -6716,8 +6735,9 @@
                           (##options-set!
                            port
                            (##fx+ roptions
-                                  (##fx* woptions
-                                         (macro-stream-options-output-shift)))))))
+                                  (##fxarithmetic-shift-left
+                                   woptions
+                                   (macro-stream-options-output-shift)))))))
                 (if (##fixnum? result)
                     (begin
                       (macro-port-mutex-unlock! port)
@@ -14615,6 +14635,50 @@
         (pair? tok)
         (six-type? re tok)))
 
+  (define (read-imports re autosemi? start-pos tok cont)
+    (let loop ((re re) (tok tok) (rev-imports '()))
+      (read-expression
+       re
+       #t ;; autosemi? = #t will cause end of expression at space
+       tok
+       max-precedence
+       'no-comma ;; comma is used to separate imports
+       (lambda (re maybe-tok expr1)
+         (let ((maybe-tok
+                (get-token-unless-whitespace-to-eol re maybe-tok)))
+
+           (define (next re maybe-tok rev-imports)
+             (if (eq? maybe-tok |op.,|)
+                 (loop re
+                       #f
+                       rev-imports)
+                 (cont re
+                       maybe-tok
+                       (reverse rev-imports))))
+
+           (if (eq? maybe-tok 'as)
+               (read-expression
+                re
+                #t ;; autosemi? = #t will cause end of expression at space
+                (get-token re #f #f)
+                max-precedence
+                'no-comma ;; comma is used to separate imports
+                (lambda (re maybe-tok expr2)
+                  (let ((maybe-tok
+                         (get-token-unless-whitespace-to-eol re maybe-tok)))
+                    (next re
+                          maybe-tok
+                          (cons (##wrap-op2 re
+                                            start-pos
+                                            'six.xasy
+                                            expr1
+                                            expr2)
+                                rev-imports)))))
+               (next re
+                     maybe-tok
+                     (cons expr1
+                           rev-imports))))))))
+
   (define (read-expression re autosemi? maybe-tok level restriction cont)
     (let* ((tok
             (get-token-no-autosemi re maybe-tok))
@@ -15106,6 +15170,24 @@
         (six-type? re tok)
         (expression-starter? re tok)))
 
+  (define (get-token-unless-whitespace-to-eol re maybe-tok)
+    (if (and (eq? maybe-tok |token.;-auto|)
+             (not (whitespace-to-eol? re)))
+        (get-token re #f #f)
+        maybe-tok))
+
+  (define (whitespace-to-eol? re)
+    (let loop ()
+      (let ((c (macro-peek-next-char-or-eof re)))
+        (cond ((or (not (char? c)) (char=? c #\newline))
+               #t)
+              ((eq? (##readtable-char-handler (macro-readenv-readtable re) c)
+                    ##read-whitespace)
+               (macro-read-next-char-or-eof re) ;; skip whitespace character
+               (loop))
+              (else
+               #f)))))
+
   (define (read-statement re autosemi? maybe-tok cont)
     (let* ((tok
             (get-token-no-autosemi re maybe-tok))
@@ -15362,35 +15444,29 @@
                                      expr
                                      stat)))))))
             ((eq? tok 'import)
-             (read-expression
-              re
-              autosemi?
-              #f
-              max-precedence
-              #f
-              (lambda (re maybe-tok expr)
-                (cont re
-                      (expect re autosemi? maybe-tok |token.;|)
-                      (##wrap-op1 re
-                                  start-pos
-                                  'six.import
-                                  expr)))))
+             (read-imports re
+                           autosemi?
+                           start-pos
+                           #f
+                           (lambda (re maybe-tok imports)
+                             (cont re
+                                   (expect re autosemi? maybe-tok |token.;|)
+                                   (##wrap-op re
+                                              start-pos
+                                              'six.import
+                                              imports)))))
             ((eq? tok 'from)
              (read-expression
               re
-              (let ((autosemi? #f)) ;; allow whitespace
-                autosemi?)
+              #t ;; autosemi? = #t will cause end of expression at space
               #f
               max-precedence
-              #f
+              'no-comma ;; forbid comma for consistency with import statement
               (lambda (re maybe-tok expr1)
-                (let ((tok2
-                       (expect-and-get-token
-                        re
-                        (let ((autosemi? #f)) ;; allow whitespace
-                          autosemi?)
-                        maybe-tok
-                        'import)))
+                (let* ((maybe-tok
+                        (get-token-unless-whitespace-to-eol re maybe-tok))
+                       (tok2
+                        (expect-and-get-token re #f maybe-tok 'import)))
                   (if (eq? tok2 op.*)
                       (cont re
                             (expect re autosemi? #f |token.;|)
@@ -15398,20 +15474,17 @@
                                         start-pos
                                         'six.from-import-*
                                         expr1))
-                      (read-expression
-                       re
-                       autosemi?
-                       tok2
-                       max-precedence
-                       #f
-                       (lambda (re maybe-tok expr2)
-                         (cont re
-                               (expect re autosemi? maybe-tok |token.;|)
-                               (##wrap-op2 re
-                                           start-pos
-                                           'six.from-import
-                                           expr1
-                                           expr2)))))))))
+                      (read-imports re
+                                    autosemi?
+                                    start-pos
+                                    tok2
+                                    (lambda (re maybe-tok imports)
+                                      (cont re
+                                            (expect re autosemi? maybe-tok |token.;|)
+                                            (##wrap-op re
+                                                       start-pos
+                                                       'six.from-import
+                                                       (cons expr1 imports))))))))))
             ((or (eq? tok |token.;|) (eq? tok |token.;-auto|))
              (cont re
                    #f

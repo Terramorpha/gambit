@@ -169,6 +169,7 @@ open-input-file
 open-output-file
 output-port?
 pair?
+partition
 peek-char
 positive?
 procedure?
@@ -266,6 +267,9 @@ unless
 when
 
 ;; procedures
+balanced-quotient
+balanced-remainder
+balanced/
 binary-port?
 boolean=?
 bytevector
@@ -277,6 +281,9 @@ bytevector-u8-ref
 bytevector-u8-set!
 bytevector?
 call-with-port
+ceiling-quotient
+ceiling-remainder
+ceiling/
 char-foldcase
 close-port
 command-line
@@ -290,6 +297,9 @@ eof-object
 error-object-irritants
 error-object-message
 error-object?
+euclidean-quotient
+euclidean-remainder
+euclidean/
 exact
 exact-integer-sqrt
 exact-integer?
@@ -332,6 +342,9 @@ read-error?
 read-line
 read-string
 read-u8
+round-quotient
+round-remainder
+round/
 square
 string->utf8
 string->vector
@@ -400,6 +413,7 @@ address-info-socket-type
 address-info?
 address-infos
 all-bits-set?
+any-bit-set?
 any-bits-set?
 append-reverse
 append-reverse!
@@ -408,7 +422,17 @@ arithmetic-shift
 asinh
 atanh
 bit-count
+bit-field
+bit-field-any?
+bit-field-clear
+bit-field-every?
+bit-field-replace
+bit-field-replace-same
+bit-field-reverse
+bit-field-rotate
+bit-field-set
 bit-set?
+bit-swap
 bits
 bits->list
 bits->vector
@@ -416,6 +440,9 @@ bitwise-and
 bitwise-andc1
 bitwise-andc2
 bitwise-eqv
+bitwise-fold
+bitwise-for-each
+bitwise-if
 bitwise-ior
 bitwise-merge
 bitwise-nand
@@ -423,6 +450,7 @@ bitwise-nor
 bitwise-not
 bitwise-orc1
 bitwise-orc2
+bitwise-unfold
 bitwise-xor
 box
 box?
@@ -466,6 +494,7 @@ continuation-capture
 continuation-graft
 continuation-return
 continuation?
+copy-bit
 copy-bit-field
 copy-file
 cosh
@@ -521,6 +550,7 @@ expression-parsing-exception-kind
 expression-parsing-exception-parameters
 expression-parsing-exception-source
 expression-parsing-exception?
+every-bit-set?
 extract-bit-field
 f32vector
 f32vector->list
@@ -783,6 +813,7 @@ mailbox-receive-timeout-exception-arguments
 mailbox-receive-timeout-exception-procedure
 mailbox-receive-timeout-exception?
 main
+make-bitwise-generator
 make-condition-variable
 make-f32vector
 make-f64vector
@@ -912,6 +943,9 @@ protocol-info-aliases
 protocol-info-name
 protocol-info-number
 protocol-info?
+r7rs-raise
+r7rs-raise-continuable
+r7rs-with-exception-handler
 raise
 random-f64vector
 random-integer
@@ -1153,6 +1187,7 @@ socket-info-address
 socket-info-family
 socket-info-port-number
 socket-info?
+split-at
 stack-overflow-exception?
 started-thread-exception-arguments
 started-thread-exception-procedure
@@ -1164,8 +1199,18 @@ string->uninterned-keyword
 string->uninterned-symbol
 string-ci=?-hash
 string-concatenate
+string-contains
+string-contains-ci
+string-prefix-ci?
+string-prefix-length
+string-prefix-length-ci
+string-prefix?
 string-set
 string-shrink!
+string-suffix-ci?
+string-suffix-length
+string-suffix-length-ci
+string-suffix?
 string=?-hash
 subf32vector
 subf32vector-fill!

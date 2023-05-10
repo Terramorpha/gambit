@@ -2,7 +2,7 @@
 
 ;;; File: "_repl.scm"
 
-;;; Copyright (c) 1994-2021 by Marc Feeley, All Rights Reserved.
+;;; Copyright (c) 1994-2022 by Marc Feeley, All Rights Reserved.
 
 ;;;============================================================================
 
@@ -518,7 +518,7 @@
   (mk-degen ()
     (##list 'future (##decomp (^ 0)))))
 
-(define-prim ##degen-guard-reraise
+(define-prim ##degen-reraise
   (mk-degen ()
     (##void)))
 
@@ -608,7 +608,7 @@
    (##cons ##cprc-future      ##degen-future)
 
    (##cons ##cprc-guard       (mk-degen () (degen ##degen-guard 'guard)))
-   (##cons ##cprc-guard-reraise ##degen-guard-reraise)))
+   (##cons ##cprc-reraise     ##degen-reraise)))
 
 ;;;----------------------------------------------------------------------------
 
@@ -819,7 +819,8 @@
    (or (##eq? var (macro-self-var))
        (##eq? var (macro-selector-var))
        (##eq? var (macro-do-loop-var))
-       (##eq? var (macro-guard-var)))))
+       (##eq? var (macro-guard-exc-var))
+       (##eq? var (macro-guard-cont-var)))))
 
 (define-prim (##hidden-parameter? param)
   (or (##eq? param ##trace-depth)
@@ -1318,7 +1319,8 @@
 
 (define-prim (##display-locat locat pinpoint? port)
   (if locat ;; locat is #f if location unknown
-      (let* ((container (##locat-container locat))
+      (let* ((pinpoint? (and pinpoint? (##not (##pinpoint-locat locat))))
+             (container (##locat-container locat))
              (path (##container->path container)))
         (if path
             (##write (##repl-path-normalize path) port)
@@ -1330,6 +1332,17 @@
           (##write line port)
           (##write-string (if pinpoint? "." ":") port)
           (##write col port)))))
+
+(define ##pinpoint-locat-hook #f)
+
+(define-prim (##pinpoint-locat-hook-set! x)
+  (set! ##pinpoint-locat-hook x))
+
+(define-prim (##pinpoint-locat locat)
+  (let ((pl-hook ##pinpoint-locat-hook))
+    (if (##procedure? pl-hook)
+        (pl-hook locat)
+        #f)))
 
 (define ##repl-path-normalize-hook #f)
 
@@ -1886,7 +1899,7 @@
               (execute))
              ((##eq? ##nontail-call-for-step parent)
               (if (##eq? s-or-l 'l)
-                  (##nontail-call-for-leap execute)
+                  (##nontail-call-for-leap execute stepper)
                   (begin
                     (if (##eq? s-or-l 's)
                         ;; turn on stepping before tail call (execute)
@@ -1899,7 +1912,7 @@
                       depth
                       (if (##eq? s-or-l 'l)
                           (lambda ()
-                            (##nontail-call-for-leap execute))
+                            (##nontail-call-for-leap execute stepper))
                           (lambda ()
                             (if (##eq? s-or-l 's)
                                 ;; turn on stepping before nontail call (execute)
@@ -2112,7 +2125,7 @@
   (##eq? (##continuation-parent cont) ##with-no-result-expected-toplevel))
 
 (define-prim (##step-handler-get-command $code rte)
-  (##repl
+  (##repl-debug
    (lambda (first port)
      (##display-situation
       "STOPPED"
@@ -2489,6 +2502,10 @@
 
 (implement-type-repl-channel-ports)
 
+(define-prim (##exit-with-exception-on-exception thunk)
+  ;; TODO: improve so that exit happens only for output on port
+  (##with-exception-handler ##exit-with-exception thunk))
+
 (define-prim (##make-repl-channel-ports input-port output-port error-port)
   (macro-make-repl-channel-ports
 
@@ -2566,14 +2583,16 @@
   (define prompt "> ")
 
   (let ((output-port (macro-repl-channel-output-port channel)))
-    (if (##fx< 0 level)
-        (##write level output-port))
-    (if (##fx< 0 depth)
-        (begin
-          (##write-string "\\" output-port)
-          (##write depth output-port)))
-    (##write-string prompt output-port)
-    (##force-output output-port))
+    (##exit-with-exception-on-exception
+     (lambda ()
+       (if (##fx< 0 level)
+           (##write level output-port))
+       (if (##fx< 0 depth)
+           (begin
+             (##write-string "\\" output-port)
+             (##write depth output-port)))
+       (##write-string prompt output-port)
+       (##force-output output-port))))
 
   ((macro-repl-channel-ports-read-expr channel) channel))
 
@@ -2584,7 +2603,9 @@
        (if (##not (##eq? obj (##void)))
            (begin
              (##repl-channel-result-history-add channel obj)
-             (##pretty-print obj output-port ##max-fixnum #f))))
+             (##exit-with-exception-on-exception
+              (lambda ()
+                (##pretty-print obj output-port ##max-fixnum #f))))))
      results)))
 
 (define-prim (##repl-channel-ports-display-monoline-message
@@ -2596,8 +2617,10 @@
          (if err?
              (macro-repl-channel-error-port channel)
              (macro-repl-channel-output-port channel))))
-    (writer port)
-    (##newline port)))
+    (##exit-with-exception-on-exception
+     (lambda ()
+       (writer port)
+       (##newline port)))))
 
 (define-prim (##repl-channel-ports-display-multiline-message
               channel
@@ -2608,7 +2631,9 @@
          (if err?
              (macro-repl-channel-error-port channel)
              (macro-repl-channel-output-port channel))))
-    (writer port)))
+    (##exit-with-exception-on-exception
+     (lambda ()
+       (writer port)))))
 
 (define-prim (##repl-channel-ports-display-continuation channel cont depth)
   (if (##repl-display-environment?)
@@ -2622,19 +2647,26 @@
 (define-prim (##repl-channel-ports-really-exit? channel)
   (let ((input-port (macro-repl-channel-input-port channel))
         (output-port (macro-repl-channel-output-port channel)))
-    (##write-string "*** EOF again to exit" output-port)
-    (##newline output-port)
-    (##force-output output-port)
+    (##exit-with-exception-on-exception
+     (lambda ()
+       (##write-string "*** EOF again to exit" output-port)
+       (##newline output-port)
+       (##force-output output-port)))
     (##not (##char? (##peek-char input-port)))))
 
 (define-prim (##repl-channel-ports-newline channel)
   (let ((output-port (macro-repl-channel-output-port channel)))
-    (##newline output-port)))
+    (##exit-with-exception-on-exception
+     (lambda ()
+       (##newline output-port)))))
 
 (define-prim (##repl-channel-ports-ask channel prompt echo?)
   (let ((input-port (macro-repl-channel-input-port channel))
         (output-port (macro-repl-channel-output-port channel)))
-    (##write-string prompt output-port)
+    (##exit-with-exception-on-exception
+     (lambda ()
+       (##write-string prompt output-port)
+       (##force-output output-port)))
     (##repl-channel-discard-buffered-input channel)
     (let ((answer (##read-line input-port)))
       (##output-port-column-set! output-port 1)
@@ -2693,20 +2725,15 @@
 (define-prim (##repl-debug
               #!optional
               (write-reason #f)
+              (reason #f)
               (toplevel? #f)
               (err? #f))
-  (let* ((old-setting
-          (##set-debug-settings!
-           (##fx+ (macro-debug-settings-error-mask)
-                  (macro-debug-settings-user-intr-mask))
-           (##fx+ (macro-debug-settings-error-repl)
-                  (macro-debug-settings-user-intr-repl))))
-         (results
-          (##repl write-reason #f toplevel? err?)))
-    (##set-debug-settings!
-     (macro-debug-settings-error-mask)
-     old-setting)
-    results))
+  (##set-debug-settings!
+   (##fx+ (macro-debug-settings-error-mask)
+          (macro-debug-settings-user-intr-mask))
+   (##fx+ (macro-debug-settings-error-repl)
+          (macro-debug-settings-user-intr-repl)))
+  (##repl write-reason reason toplevel? err?))
 
 (define-prim (##repl-debug-main)
 
@@ -2764,6 +2791,7 @@
      (##newline port)
      (##newline port)
      #f)
+   #f
    #t)
 
   (##exit))
@@ -4731,7 +4759,9 @@
 
 (define-prim (##exec-stats thunk)
   (let* ((at-start (##process-statistics))
+         (cpu-cycles-at-start (##cpu-cycle-count-start))
          (result (thunk))
+         (cpu-cycles-at-end (##cpu-cycle-count-end))
          (at-end (##process-statistics))
          (user-time
           (##fl- (##f64vector-ref at-end 0)
@@ -4770,7 +4800,9 @@
                   (##fl+ (if (##interp-procedure? thunk)
                              (##f64vector-ref at-end 8) ;; thunk call frame space
                              (macro-inexact-+0))
-                         (##f64vector-ref at-end 9)))))) ;; at-end structure space
+                         (##f64vector-ref at-end 9))))) ;; at-end structure space
+         (cpu-cycles
+          (##fxmax 0 (##fx- cpu-cycles-at-end cpu-cycles-at-start))))
 
     (##list (##cons 'result          result)
             (##cons 'user-time       user-time)
@@ -4782,7 +4814,8 @@
             (##cons 'nb-gcs          nb-gcs)
             (##cons 'minflt          minflt)
             (##cons 'majflt          majflt)
-            (##cons 'bytes-allocated bytes-allocated))))
+            (##cons 'bytes-allocated bytes-allocated)
+            (##cons 'cpu-cycles      cpu-cycles))))
 
 (define-prim (##time-thunk
               thunk
@@ -4815,7 +4848,9 @@
                (stats (##cdr stats))
                (majflt (##cdar stats))
                (stats (##cdr stats))
-               (bytes-allocated (##cdar stats)))
+               (bytes-allocated (##cdar stats))
+               (stats (##cdr stats))
+               (cpu-cycles (##cdar stats)))
 
           (define (secs x)
             (let* ((precision 1000000)
@@ -4878,7 +4913,12 @@
             (##newline port)
 
             (pluralize majflt " major fault")
-            (##newline port))
+            (##newline port)
+
+            (if (##> cpu-cycles 0)
+                (begin
+                  (pluralize cpu-cycles " cpu cycle")
+                  (##newline port))))
 
           (print-stats p)
 

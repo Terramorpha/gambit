@@ -2,7 +2,7 @@
 
 ;;; File: "VM.scm"
 
-;;; Copyright (c) 2020-2021 by Marc Feeley, All Rights Reserved.
+;;; Copyright (c) 2020-2022 by Marc Feeley, All Rights Reserved.
 
 ;;;============================================================================
 
@@ -97,6 +97,53 @@ VM.prototype.terminate_thread = function (thread_scm) {
                [thread_scm]);
 };
 
+VM.prototype.completions = function (thread_scm, input, cursor) {
+
+  var vm = this;
+
+  var READTABLE_CHAR_DELIMITERP_TABLE = 6;
+  var readtable = @glo@['##main-readtable'];
+  var char_delimiterp_table = readtable.@slots@[READTABLE_CHAR_DELIMITERP_TABLE];
+  var start = cursor-1;
+
+  while (start >= 0) {
+    var c = Math.min(input.charCodeAt(start), 128);
+    if (char_delimiterp_table[c]) break;
+    start--;
+  }
+
+  start++;
+
+  var completions = [];
+
+  if (start < cursor) {
+
+    var prefix = input.slice(start, cursor);
+    var prefix_len = prefix.length;
+
+    for (var sym in @symbol_table@) {
+      if (sym.length >= prefix_len &&
+          sym !== prefix &&
+          sym.slice(0, prefix_len) === prefix) {
+        completions.push(sym);
+      }
+    }
+
+    completions.sort();
+
+    completions.unshift(prefix);
+  }
+
+  return completions;
+};
+
+VM.prototype.pinpoint = function (container, line0, col0) {
+
+  var vm = this;
+
+  if (vm.ui) vm.ui.pinpoint(container, line0, col0);
+};
+
 main_vm = new VM();
 
 EOF
@@ -106,24 +153,26 @@ EOF
 
 ;; Define "console" ports that support multiple independent REPLs.
 
-(define (##os-device-stream-open-console title flags ui thread)
+(define (##os-device-stream-open-console title name flags ui thread)
   (##inline-host-declaration "
 
-@os_device_stream_open_console@ = function (vm, title_scm, flags_scm, ui_scm, thread_scm) {
+@os_device_stream_open_console@ = function (vm, title_scm, name_scm, flags_scm, ui_scm, thread_scm) {
 
   var title = @scm2host@(title_scm);
+  var name = @scm2host@(name_scm);
   var flags = @scm2host@(flags_scm);
   var ui = @scm2host@(ui_scm);
 
-  var dev = new Device_console(vm, title, flags, ui, thread_scm);
+  var dev = new Device_console(vm, title, name, flags, ui, thread_scm);
 
   return @host2foreign@(dev);
 };
 
 ")
   (##inline-host-expression
-   "@os_device_stream_open_console@(main_vm,@1@,@2@,@3@,@4@)"
+   "@os_device_stream_open_console@(main_vm,@1@,@2@,@3@,@4@,@5@)"
    title
+   name
    flags
    ui
    thread))
@@ -149,6 +198,7 @@ EOF
        (let ((device
               (##os-device-stream-open-console
                title
+               name
                (##psettings->device-flags psettings)
                ui
                thread)))
@@ -180,8 +230,35 @@ EOF
                    'console
                    (##string->symbol
                     (##string-append "console" (##number->string sn 10)))))
-         (port (##open-console title name (or ui (##current-ui)) thread)))
-    (##make-repl-channel-ports port port port)))
+         (port (##open-console title name (or ui (##current-ui)) thread))
+         (repl-channel (##make-repl-channel-ports port port port)))
+    repl-channel))
+
+(##pinpoint-locat-hook-set!
+ (lambda (locat)
+   (let* ((container (##locat-container locat))
+          (filepos (##position->filepos (##locat-position locat)))
+          (line0 (##filepos-line filepos))
+          (col0 (##filepos-col filepos)))
+     (##os-pinpoint container line0 col0))))
+
+(define (##os-pinpoint container line0 col0)
+  (##inline-host-declaration "
+
+@os_pinpoint@ = function (vm, container_scm, line0_scm, col0_scm) {
+
+  var line0 = @scm2host@(line0_scm);
+  var col0 = @scm2host@(col0_scm);
+
+  return @host2foreign@(vm.pinpoint(container_scm, line0, col0));
+};
+
+")
+  (##inline-host-expression
+   "@os_pinpoint@(main_vm,@1@,@2@,@3@)"
+   container
+   line0
+   col0))
 
 ;; Enable web console.
 
@@ -194,6 +271,37 @@ EOF
       (macro-repl-channel-really-exit?-set!
        (##thread-repl-channel-get! (macro-current-thread))
        (lambda (channel) #f))))
+
+;; Allow fetching modules directly from github.com
+
+(##inline-host-statement
+ "@os_url_whitelist_add@('https://raw.githubusercontent.com/');")
+
+(define (##web-search-module-in-search-order modref search-order)
+  (let* ((host
+          (macro-modref-host modref))
+         (tag
+          (macro-modref-tag modref))
+         (rpath
+          (macro-modref-rpath modref)))
+    (if (and (##pair? host)
+             (##equal? (##last host) "github.com")
+             (##member (##modref->string modref)
+                       (##get-module-whitelist)
+                       ##module-prefix=?))
+        (##search-module-at
+         rpath
+         (##butlast rpath)
+         (##path-expand
+          (or tag "master")
+          (##path-expand (##last rpath)
+                         (##path-join-reversed
+                          (##butlast host)
+                          "https://raw.githubusercontent.com")))
+         ##scheme-file-extensions)
+        (##default-search-module-in-search-order modref search-order))))
+
+(##search-module-in-search-order-set! ##web-search-module-in-search-order)
 
 ;;;----------------------------------------------------------------------------
 

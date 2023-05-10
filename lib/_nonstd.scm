@@ -2,7 +2,7 @@
 
 ;;; File: "_nonstd.scm"
 
-;;; Copyright (c) 1994-2021 by Marc Feeley, All Rights Reserved.
+;;; Copyright (c) 1994-2023 by Marc Feeley, All Rights Reserved.
 
 ;;;============================================================================
 
@@ -466,12 +466,12 @@
                     (##cons
                      f
                      (let ((s (##symbol->string f)))
-                       (let ((e (##string-prefix=? s "enable-")))
+                       (let ((e (##string-prefix-strip "enable-" s)))
                          (if e
                              (##remq (##string->symbol
                                       (##string-append "disable-" e))
                                      features)
-                             (let ((d (##string-prefix=? s "disable-")))
+                             (let ((d (##string-prefix-strip "disable-" s)))
                                (if d
                                    (##remq (##string->symbol
                                             (##string-append "enable-" d))
@@ -509,6 +509,9 @@
 
     (define (gen-absent-obj)
       (##cons '##quote (##cons (macro-absent-obj) '())))
+
+    (define (extended-bindings var)
+      `(##let () (##declare (extended-bindings ,var)) ,var))
 
     (##shape src src -2)
 
@@ -636,8 +639,9 @@
                                        (##subvector params 0 nreq))
                                       (##list rest-arg))
                             (loop (##fx- j 1)
-                                  `(##cons ,(##vector-ref params j)
-                                           ,rest-arg)))))
+                                  `(,(extended-bindings '##cons)
+                                    ,(##vector-ref params j)
+                                    ,rest-arg)))))
                     (gen-params i))))
 
             (define (gen-dispatch i)
@@ -651,14 +655,16 @@
                        (gen-branch i case-i))
                       (else
                        `(##if ,(if (##fx= i req-and-opt-param-count)
-                                   `(##null? ,rest-param)
-                                   `(##eq? ,(##vector-ref params i)
-                                           ,(gen-absent-obj)))
+                                   `(,(extended-bindings '##null?)
+                                     ,rest-param)
+                                   `(,(extended-bindings '##eq?)
+                                     ,(##vector-ref params i)
+                                     ,(gen-absent-obj)))
                               ,(if case-i
                                    (gen-branch i case-i)
                                    (begin
                                      (set! need-proc-var? #t)
-                                     `(##raise-wrong-number-of-arguments-exception-nary
+                                     `(,(extended-bindings '##raise-wrong-number-of-arguments-exception-nary)
                                        ,proc-var
                                        ,@(gen-params i))))
                               ,(gen-dispatch (##fx+ i 1)))))))
@@ -2715,13 +2721,18 @@
           (macro-check-string origin 2 (path-expand path origin)
             (##path-expand path origin))))))
 
-(define-prim (##path-join parts dir)
-  (let loop ((lst parts)
-             (result dir))
-    (if (##pair? lst)
-        (loop (##cdr lst)
-              (##path-expand (##car lst) result))
-        result)))
+(define-prim (##path-join parts path)
+  (if (##pair? parts)
+      (##path-join (##cdr parts)
+                   (##path-expand (##car parts) path))
+      path))
+
+(define-prim (##path-join-reversed rparts path)
+  (if (##pair? rparts)
+      (##path-expand (##car rparts)
+                     (##path-join-reversed (##cdr rparts)
+                                           path))
+      path))
 
 (define-prim (##path-normalize
               path
@@ -3005,9 +3016,9 @@
 ;;; Filesystem operations.
 
 (define-prim (##create-temporary-directory
-              path-or-settings
               #!optional
-              (raise-os-exception? #t))
+              (path-or-settings (macro-absent-obj))
+              (raise-os-exception? (macro-absent-obj)))
 
   (define (fail)
     (##fail-check-string-or-settings 1 create-temporary-directory path-or-settings))
@@ -3016,7 +3027,9 @@
    (macro-direction-inout)
    '(path:
      permissions:)
-   (cond ((##string? path-or-settings)
+   (cond ((##eq? path-or-settings (macro-absent-obj))
+          '())
+         ((##string? path-or-settings)
           (##list 'path: path-or-settings))
          (else
           path-or-settings))
@@ -3024,14 +3037,23 @@
    (lambda (psettings)
      (let ((path
             (macro-psettings-path psettings)))
-       (if (##not (##string? path))
+       (if (##not (or (##not path) (##string? path)))
            (fail)
-           (let ((pid (##os-getpid))
-                 (permissions (##psettings->permissions psettings #o777)))
+           (let* ((prefix
+                   (or path
+                       (##path-expand
+                        (##string-append
+                         (##path-strip-directory (##executable-path))
+                         "-temp")
+                        (##os-path-tempdir))))
+                  (pid
+                   (##os-getpid))
+                  (permissions
+                   (##psettings->permissions psettings #o777)))
              (let loop ((i 0))
                (let* ((resolved-path
                        (##path-resolve
-                        (##string-append path
+                        (##string-append prefix
                                          (##number->string pid)
                                          (if (##fx= i 0)
                                              ""
@@ -3046,7 +3068,9 @@
                              code))
                      resolved-path)))))))))
 
-(define-prim (create-temporary-directory path-or-settings)
+(define-prim (create-temporary-directory
+              #!optional
+              (path-or-settings (macro-absent-obj)))
   (macro-force-vars (path-or-settings)
     (##create-temporary-directory path-or-settings)))
 
@@ -3054,7 +3078,7 @@
               prim
               path-or-settings
               #!optional
-              (raise-os-exception? #t))
+              (raise-os-exception? (macro-absent-obj)))
 
   (define (fail)
     (##fail-check-string-or-settings 1 prim path-or-settings))
@@ -3094,7 +3118,7 @@
 (define-prim (##create-directory
               path-or-settings
               #!optional
-              (raise-os-exception? #t))
+              (raise-os-exception? (macro-absent-obj)))
   (##create-directory-or-fifo
    create-directory
    path-or-settings

@@ -10,12 +10,17 @@
 (macro-case-target
  ((C)
   (c-declare "#include \"mem.h\"")
+  (##define-macro (macro-min-bignum-adigits) 1)
   (##define-macro (use-fast-bignum-algorithms) #t))
 
  ((js)
+  (##define-macro (macro-min-bignum-adigits) 3)
+  ;; Set this to minimize code size, but js is fast enough to benefit
+  ;; from fast bignum algorithms.
   (##define-macro (use-fast-bignum-algorithms) #f))
 
  (else
+  (##define-macro (macro-min-bignum-adigits) 3)
   (##define-macro (use-fast-bignum-algorithms) #f)))
 
 (define-prim (##use-fast-bignum-algorithms?)
@@ -897,7 +902,7 @@
       (if (##eqv? result-den 1)
           result-num
           (macro-ratnum-make result-num result-den))))
-  
+
   (macro-number-dispatch x (type-error-on-x)
 
     (macro-number-dispatch y (type-error-on-y) ;; x = fixnum
@@ -1387,118 +1392,263 @@
 
 ;;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-;;; quotient, remainder, modulo
+;;; division operators
 
-(define-prim (##divide x y kind)
+(define-prim (##division x y operation)
 
-  ;; kind = 0  : floor-remainder
-  ;; kind = 1  : floor-quotient
-  ;; kind = 2  : floor/
-  ;; kind = 4  : truncate-remainder
-  ;; kind = 5  : truncate-quotient
-  ;; kind = 6  : truncate/
-  ;; kind = 8  : modulo
-  ;; kind = 12 : remainder
-  ;; kind = 13 : quotient
+  ;; The last two bits of operation determine which of
+  ;; quotient and remainder (of whatever flavor) you
+  ;; *don't* want:
+  ;; 00: return both quotient and remainder
+  ;; 10: return remainder
+  ;; 01: return quotient
+  ;; 11: not used
 
-  (define (prim)
-    (cond ((##fx= kind 0)  floor-remainder)
-          ((##fx= kind 1)  floor-quotient)
-          ((##fx= kind 2)  floor/)
-          ((##fx= kind 4)  truncate-remainder)
-          ((##fx= kind 5)  truncate-quotient)
-          ((##fx= kind 6)  truncate/)
-          ((##fx= kind 12) remainder)
-          ((##fx= kind 13) quotient)
-          (else            modulo))) ;; kind = 8
+  ;; The upper bits determine which division operation we want:
+  ;; 0: truncate
+  ;; 1: floor
+  ;; 2: ceiling
+  ;; 3: round
+  ;; 4: euclidean
+  ;; 5: balanced
+
+  ;; Then there are the classical three procedures, which operate
+  ;; identically to some of the new ones but with different names:
+
+  ;; (+ (* 6 4) 1) = 25: quotient, same as truncate-quotient
+  ;; (+ (* 6 4) 2) = 26: remainder, same as truncate-remainder
+  ;; (+ (* 7 4) 2) = 30: modulo, same as floor-remainder
+
+  (define-macro (return-quotient?)
+    `(fxzero? (fxand operation 2)))
+
+  (define-macro (return-remainder?)
+    `(fxzero? (fxand operation 1)))
+
+  (define-macro (define-proc)
+
+    (define (suffix operation)
+      (case (fxand operation 3)
+        ((0) "/")
+        ((1) "-quotient")
+        (else ;; (2)
+         "-remainder")))
+
+    (define (prefix operation)
+      (case (fxarithmetic-shift-right operation 2)
+        ((0) "truncate")
+        ((1) "floor")
+        ((2) "ceiling")
+        ((3) "round")
+        ((4) "euclidean")
+        (else ;; (5)
+         "balanced")))
+
+    (define (make-name operation)
+      (string->symbol (string-append (prefix operation)
+                                     (suffix operation))))
+
+    (let ((result
+           `(define (proc)
+              (case operation
+                ,@(apply append (map (lambda (main-operation)
+                                       (map (lambda (sub-operation)
+                                              (let ((operation (+ (* 4 main-operation) sub-operation)))
+                                                `((,operation)
+                                                  ,(make-name operation))))
+                                            (iota 3)))
+                                     (iota 6)))
+                ,@'(((25) quotient)
+                    ((26) remainder)
+                    ((30) modulo))))))
+      result))
+
+  (define-proc)
+
+  (define (fixnum-overflow)
+    (##raise-fixnum-overflow-exception (proc) x))
+
+  (define (return quo rem)
+    (case (fxand operation 3)
+      ((0) (values quo rem))
+      ((1) quo)
+      (else ;; (2)
+       rem)))
+
+  (define (inexactify quo rem require-inexact?)
+    ;; quo and rem are each either #f or an exact integer
+    (return (if (and require-inexact? quo) (exact->inexact quo) quo)
+            (if (and require-inexact? rem) (exact->inexact rem) rem)))
 
   (define (type-error-on-x)
-    (##fail-check-integer 1 (prim) x y))
+    (##fail-check-integer 1 (proc) x y))
 
   (define (type-error-on-y)
-    (##fail-check-integer 2 (prim) x y))
+    (##fail-check-integer 2 (proc) x y))
 
   (define (divide-by-zero-error)
-    (##raise-divide-by-zero-exception (prim) x y))
+    (##raise-divide-by-zero-exception (proc) x y))
 
-  (define (fixnum-fixnum-case x y)
-    (if (##fx= y -1) ;; needed because (quotient ##min-fixnum -1) is a bignum
+  (define (fixnum-fixnum-case x y require-inexact?)
+    (if (and (fx= y -1)           ;; neither is likely, check cheaper one first
+             (fx= x ##min-fixnum))
+        (inexactify (and (fxzero? (fxand operation 2)) ;; return bignum quo only if necessary
+                         (macro-if-bignum
+                          ##bignum.-min-fixnum
+                          (fixnum-overflow)))
+                    0
+                    require-inexact?)
+        (let ((quo (fxquotient x y))
+              (rem (fxremainder x y)))
+          (if (fxzero? rem)
+              (inexactify quo rem require-inexact?)
+              ;; neither y nor rem is zero
+              (let ((op (fxarithmetic-shift-right operation 2)))
+                (case op
+                  ((0 6) ;; truncate, quotient, and remainder
+                   (inexactify quo rem require-inexact?))
+                  ((1 7) ;; floor modulo
+                   (if (eq? (fxpositive? y) (fxpositive? rem))
+                       (inexactify quo rem require-inexact?)
+                       (inexactify (fx- quo 1) (fx+ rem y) require-inexact?)))
+                  ((2) ;; ceiling
+                   (if (eq? (fxpositive? y) (fxnegative? rem))
+                       (inexactify quo rem require-inexact?)
+                       (inexactify (fx+ quo 1) (fx- rem y) require-inexact?)))
+                  ((3) ;; round
+                   (let ((abs-y/2 (fxabs (if (fxpositive? y)
+                                             (fxarithmetic-shift-right y 1)
+                                             (fxarithmetic-shift-right (fx+ y 1) 1)))))
+                     (cond ((and (fxeven? y)
+                                 (fxodd? quo)
+                                 (fx= (fxabs rem) abs-y/2))
+                            ;; we need to fix this very special case of round
+                            (if (eq? (fxpositive? rem) (fxpositive? y))
+                                (inexactify (fx+ quo 1) (fx- rem y) require-inexact?)
+                                (inexactify (fx- quo 1) (fx+ rem y) require-inexact?)))
+                           ((fx< abs-y/2 rem)
+                            (if (fxnegative? y)               ;; avoid (abs ##min-fixnum)
+                                (inexactify (fx- quo 1) (fx+ rem y) require-inexact?)
+                                (inexactify (fx+ quo 1) (fx- rem y) require-inexact?)))
+                           ((fx< rem (fx- abs-y/2))
+                            (if (fxnegative? y)               ;; avoid (abs ##min-fixnum)
+                                (inexactify (fx+ quo 1) (fx- rem y) require-inexact?)
+                                (inexactify (fx- quo 1) (fx+ rem y) require-inexact?)))
+                           (else
+                            (inexactify quo rem require-inexact?)))))
+                  ((4) ;; euclidean
+                   (if (fxnegative? rem)
+                       (if (fxnegative? y)                    ;; avoid (abs ##min-fixnum)
+                           (inexactify (fx+ quo 1) (fx- rem y) require-inexact?)
+                           (inexactify (fx- quo 1) (fx+ rem y) require-inexact?))
+                       (inexactify quo rem require-inexact?)))
+                  (else ;; balanced
+                   (let ((abs-y/2 (fxabs (fxarithmetic-shift-right y 1))))
+                     (cond ((fx<= abs-y/2 rem)
+                            (if (fxnegative? y)               ;; avoid (abs ##min-fixnum)
+                                (inexactify (fx- quo 1) (fx+ rem y) require-inexact?)
+                                (inexactify (fx+ quo 1) (fx- rem y) require-inexact?)))
+                           ((fx< rem (fx- abs-y/2))
+                            (if (fxnegative? y)               ;; avoid (abs ##min-fixnum)
+                                (inexactify (fx+ quo 1) (fx- rem y) require-inexact?)
+                                (inexactify (fx- quo 1) (fx+ rem y) require-inexact?)))
+                           (else
+                            (inexactify quo rem require-inexact?)))))))))))
 
-        (let ((k (##fxand kind 3)))
-          (if (##fx= k 0)
-              0 ;; floor-remainder and truncate-remainder
-              (if (##fx= k 1)
-                  (##negate x) ;; floor-quotient and truncate-quotient
-                  (##values (##negate x) 0)))) ;; floor/ and truncate/
+  (define (general-case x y require-inexact?)
 
-        (if (##fx= (##fxand kind 4) 0)
+    (declare (mostly-fixnum))
 
-            ;; floor variants
-            (let ((k (##fxand kind 3)))
-              (if (##fx= k 0)
-                  (##fxmodulo x y) ;; floor-remainder
-                  (let* ((q (##fxquotient x y))
-                         (m (##fxmodulo x y)))
-                    (if (or (##eqv? m 0)
-                            (##eq? (##fxnegative? x) (##fxnegative? y)))
-                        (if (##fx= k 1)
-                            q ;; floor-quotient
-                            (##values q ;; floor/
-                                      m))
-                        (if (##fx= k 1)
-                            (##fx- q 1) ;; floor-quotient
-                            (##values (##fx- q 1) ;; floor/
-                                      m))))))
+    (define-macro (inc-quotient x)
+      ;; possibly increment x
+      `(and (return-quotient?) (+ ,x 1)))
 
-            ;; truncate variants
-            (let ((k (##fxand kind 3)))
-              (if (##fx= k 0)
-                  (##fxremainder x y) ;; truncate-remainder
-                  (if (##fx= k 1)
-                      (##fxquotient x y) ;; truncate-quotient
-                      (##values (##fxquotient x y) ;; truncate/
-                                (##fxremainder x y))))))))
+    (define-macro (dec-quotient x)
+      ;; possibly decrement x
+      `(and (return-quotient?) (- ,x 1)))
 
-  (define (exact-case x y convert-to-inexact?)
+    (define-macro (inc-remainder x y)
+      ;; possibly increment x
+      `(and (return-remainder?) (+ ,x ,y)))
 
-    (define (conv n)
-      (if convert-to-inexact? (##exact->inexact n) n))
+    (define-macro (dec-remainder x y)
+      ;; possibly decrement x
+      `(and (return-remainder?) (- ,x ,y)))
 
-    (let* ((qr (##exact-int.div x
-                                y
-                                (##fx> (##fxand kind 3) 0) ;; need-quotient?
-                                #t                         ;; keep-dividend?
-                                ))
-           (q (macro-qr-q qr))
-           (r (macro-qr-r qr)))
-
-      (if (and (##fx= (##fxand kind 4) 0)
-               (##not (##eqv? r 0))
-               (##not (##eq? (##negative? x) (##negative? y))))
-
-          ;; floor variants
-          (let ((k (##fxand kind 3)))
-            (if (##fx= k 0)
-                (conv (##+ r y)) ;; floor-remainder
-                (if (##fx= k 1)
-                    (conv (##- q 1)) ;; floor-quotient
-                    (##values (conv (##- q 1)) ;; floor/
-                              (conv (##+ r y))))))
-
-          ;; truncate variants
-          (let ((k (##fxand kind 3)))
-            (if (##fx= k 0)
-                (conv r) ;; truncate-remainder
-                (if (##fx= k 1)
-                    (conv q) ;; truncate-quotient
-                    (##values (conv q) ;; truncate/
-                              (conv r))))))))
+    (let* ((q+r (##exact-int.div x y
+                                 (or (fxzero? (fxand operation 2))
+                                     ;; In round, the remainder you return depends on the quotient
+                                     (fx= (fxarithmetic-shift-right operation 2) 3))
+                                 #t))
+           (quo (macro-qr-q q+r))
+           (rem (macro-qr-r q+r)))
+      (if (eqv? rem 0)
+          (inexactify quo rem require-inexact?)
+          ;; neither y nor rem is zero
+          (let ((op (fxarithmetic-shift-right operation 2)))
+            (case op
+              ((0 6) ;; truncate, quotient, remainder
+               (inexactify quo rem require-inexact?))
+              ((1 7) ;; floor, modulo
+               (if (eq? (positive? y) (positive? rem))
+                   (inexactify quo rem require-inexact?)
+                   (inexactify (dec-quotient quo) (inc-remainder rem y) require-inexact?)))
+              ((2) ;; ceiling
+               (if (eq? (positive? y) (negative? rem))
+                   (inexactify quo rem require-inexact?)
+                   (inexactify (inc-quotient quo) (dec-remainder rem y) require-inexact?)))
+              ((3) ;; round
+               (let ((abs-y/2 (abs (if (positive? y)
+                                       (arithmetic-shift y -1)
+                                       (arithmetic-shift (+ y 1) -1)))))
+                 (cond ((and (even? y)
+                             (odd? quo)
+                             (= (abs rem) abs-y/2))
+                        ;; we need to fix this very special case of round
+                        (if (eq? (positive? rem) (positive? y))
+                            (inexactify (inc-quotient quo) (dec-remainder rem y) require-inexact?)
+                            (inexactify (dec-quotient quo) (inc-remainder rem y) require-inexact?)))
+                       ((< abs-y/2 rem)
+                        (if (negative? y)
+                            (inexactify (dec-quotient quo) (inc-remainder rem y) require-inexact?)
+                            (inexactify (inc-quotient quo) (dec-remainder rem y) require-inexact?)))
+                       ((< rem (- abs-y/2))
+                        (if (negative? y)
+                            (inexactify (inc-quotient quo) (dec-remainder rem y) require-inexact?)
+                            (inexactify (dec-quotient quo) (inc-remainder rem y) require-inexact?)))
+                       (else
+                        (inexactify quo rem require-inexact?)))))
+              ((4) ;; euclidean
+               (if (negative? rem)
+                   (if (negative? y)
+                       (inexactify (inc-quotient quo) (dec-remainder rem y) require-inexact?)
+                       (inexactify (dec-quotient quo) (inc-remainder rem y) require-inexact?))
+                   (inexactify quo rem require-inexact?)))
+              (else ;; balanced
+               (let ((abs-y/2 (abs (arithmetic-shift y -1))))
+                 (cond ((<= abs-y/2 rem)
+                        (if (negative? y)
+                            (inexactify (dec-quotient quo) (inc-remainder rem y) require-inexact?)
+                            (inexactify (inc-quotient quo) (dec-remainder rem y) require-inexact?)))
+                       ((< rem (- abs-y/2))
+                        (if (negative? y)
+                            (inexactify (inc-quotient quo) (dec-remainder rem y) require-inexact?)
+                            (inexactify (dec-quotient quo) (inc-remainder rem y) require-inexact?)))
+                       (else
+                        (inexactify quo rem require-inexact?))))))))))
 
   (define (inexact-case x y)
-    (let ((exact-y (##inexact->exact y)))
-      (if (##eqv? exact-y 0)
-          (divide-by-zero-error)
-          (exact-case (##inexact->exact x) exact-y #t))))
+    (let ((exact-x (inexact->exact x))
+          (exact-y (inexact->exact y)))
+      (cond ((eqv? exact-y 0)
+             (divide-by-zero-error))
+            ((and (fixnum? exact-x)
+                  (fixnum? exact-y))
+             (fixnum-fixnum-case exact-x exact-y #t))
+            (else
+             (macro-if-bignum
+              (general-case exact-x exact-y #t)
+              (fixnum-overflow))))))
 
   (macro-number-dispatch y (type-error-on-y)
 
@@ -1506,11 +1656,11 @@
       (cond ((##fx= y 0)
              (divide-by-zero-error))
             (else
-             (fixnum-fixnum-case x y)))
+             (fixnum-fixnum-case x y #f)))
       (cond ((##fx= y 0)
              (divide-by-zero-error))
             (else
-             (exact-case x y #f)))
+             (general-case x y #f)))
       (type-error-on-x)
       (if (macro-flonum-int? x)
           (inexact-case x y)
@@ -1520,8 +1670,8 @@
           (type-error-on-x)))
 
     (macro-number-dispatch x (type-error-on-x) ;; y = bignum
-      (exact-case x y #f)
-      (exact-case x y #f)
+      (general-case x y #f)
+      (general-case x y #f)
       (type-error-on-x)
       (if (macro-flonum-int? x)
           (inexact-case x y)
@@ -1534,7 +1684,11 @@
 
     (macro-number-dispatch x (type-error-on-x) ;; y = flonum
       (if (macro-flonum-int? y)
-          (inexact-case x y)
+          (if (and (macro-special-case-exact-zero?)
+                   (##fxzero? x)
+                   (##not (##flzero? y)))
+              (return 0 0)
+              (inexact-case x y))
           (type-error-on-y))
       (if (macro-flonum-int? y)
           (inexact-case x y)
@@ -1553,7 +1707,11 @@
 
     (if (macro-cpxnum-int? y) ;; y = cpxnum
         (macro-number-dispatch x (type-error-on-x)
-          (inexact-case x y)
+          (if (and (macro-special-case-exact-zero?)
+                   (##fxzero? x)
+                   (##not (##zero? y)))
+              (return 0 0)
+              (inexact-case x y))
           (inexact-case x y)
           (type-error-on-x)
           (if (macro-flonum-int? x)
@@ -1564,84 +1722,90 @@
               (type-error-on-x)))
         (type-error-on-y))))
 
-(define-prim (##floor-remainder x y)
-  (##divide x y 0))
+(define-macro (define-most-division-operators)
 
-(define-prim (floor-remainder x y)
-  (macro-force-vars (x y)
-    (##divide x y 0)))
+  (define (suffix operation)
+    (case (fxand operation 3)
+      ((0) "/")
+      ((1) "-quotient")
+      (else ;; (2)
+       "-remainder")))
 
-(define-prim (##floor-quotient x y)
-  (##divide x y 1))
+  (define (prefix operation)
+    (case (fxarithmetic-shift-right operation 2)
+      ((0) "truncate")
+      ((1) "floor")
+      ((2) "ceiling")
+      ((3) "round")
+      ((4) "euclidean")
+      (else ;; (5)
+       "balanced")))
 
-(define-prim (floor-quotient x y)
-  (macro-force-vars (x y)
-    (##divide x y 1)))
+  (define (make-name operation)
+    (string->symbol (string-append (prefix operation)
+                                   (suffix operation))))
 
-(define-prim (##floor/ x y)
-  (##divide x y 2))
+  (define (make-##name operation)
+    (string->symbol (string-append "##"
+                                   (prefix operation)
+                                   (suffix operation))))
 
-(define-prim (floor/ x y)
-  (macro-force-vars (x y)
-    (##divide x y 2)))
+  (let ((result
+         `(begin
+            ,@(apply append (map (lambda (main-operation)
+                                   (apply append
+                                          (map (lambda (sub-operation)
+                                                 (let ((operation (+ (* 4 main-operation) sub-operation)))
+                                                   `((define-prim (,(make-##name operation) x y)
+                                                       (##division x y ,operation))
+                                                     (define-prim (,(make-name operation) x y)
+                                                       (macro-force-vars (x y)
+                                                         (##division x y ,operation))))))
+                                               (iota 3))))
+                                (iota 6))))))
+    result))
 
-(define-prim (##truncate-remainder x y)
-  (##divide x y 4))
+(define-most-division-operators)
 
-(define-prim (truncate-remainder x y)
-  (macro-force-vars (x y)
-    (##divide x y 4)))
+;; Then there are the classical three procedures, which operate
+;; identically to some of the new ones but with different names:
 
-(define-prim (##truncate-quotient x y)
-  (##divide x y 5))
+;; (+ (* 6 4) 1) = 25: quotient, same as truncate-quotient
+;; (+ (* 6 4) 2) = 26: remainder, same as truncate-remainder
+;; (+ (* 7 4) 2) = 30: modulo, same as floor-remainder
 
-(define-prim (truncate-quotient x y)
-  (macro-force-vars (x y)
-    (##divide x y 5)))
+(define-macro (define-r4rs-division-operators)
+  (define (hashify name)
+    (string->symbol (string-append "##" (symbol->string name))))
+  (let ((result
+         `(begin
+            ,@(apply append (map (lambda (name operation)
+                                   `((define-prim (,(hashify name) x y)
+                                       (##division x y ,operation))
+                                     (define-prim (,name x y)
+                                       (macro-force-vars (x y)
+                                         (##division x y ,operation)))))
+                                 '(quotient remainder modulo)
+                                 '(25 26 30))))))
+    result))
 
-(define-prim (##truncate/ x y)
-  (##divide x y 6))
-
-(define-prim (truncate/ x y)
-  (macro-force-vars (x y)
-    (##divide x y 6)))
-
-(define-prim (##remainder x y)
-  (##divide x y 12))
-
-(define-prim (remainder x y)
-  (macro-force-vars (x y)
-    (##divide x y 12)))
-
-(define-prim (##quotient x y)
-  (##divide x y 13))
-
-(define-prim (quotient x y)
-  (macro-force-vars (x y)
-    (##divide x y 13)))
-
-(define-prim (##modulo x y)
-  (##divide x y 8))
-
-(define-prim (modulo x y)
-  (macro-force-vars (x y)
-    (##divide x y 8)))
+(define-r4rs-division-operators)
 
 ;;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 ;;; gcd, lcm
 
 (define-primitive (gcd2 x y)
-  
+
   ;; We're going to write this assuming that every
   ;; other routine like ##abs, ##negate, ##exact->inexact,
   ;; etc, return #f if, e.g., bignums don't exist and an
   ;; operation would otherwise return a bignum.
-  
+
   (##define-macro (type-error-on-x) `'(1))
   (##define-macro (type-error-on-y) `'(2))
   (##define-macro (fixnum-overflow) `#f)
-  
+
   (define (fast-gcd u v)
 
     ;; See the paper "Fast Reduction and Composition of Binary
@@ -1755,7 +1919,7 @@
 
     (define (x>=2^n x n)
       (##fx< n (##integer-length x)))
-  
+
     (define (determined-minimal? u v s)
       ;; assumes  2^s <= u , v; s>= 0 fixnum
       ;; returns #t if we can determine that |u-v|<2^s
@@ -1995,7 +2159,7 @@
               (general-base b r)))))
 
   (define (fixnum-base a b)
-    
+
     ;; Note that (remainder a b) has the same
     ;; sign as a with absolute value < |b|, so we allow
     ;; these fixnums to be negative, which allows
@@ -2018,7 +2182,7 @@
            (y-first-bit     (##first-set-bit y))
            (x-length        (##integer-length x))
            (y-length        (##integer-length y))
-           
+
            ;; We need to decide whether to shift out lower zero bits.
            ;; There are two algorithms for GCD, a naive one that's
            ;; O(N^2), and a "fast" one that's O(N (\log N)^2). A shift
@@ -2064,20 +2228,20 @@
             (##abs (if shift-zero-bits?
                        (##arithmetic-shift y (##fx- y-first-bit))
                        y))))
-        
+
       (##arithmetic-shift
        (macro-exact-int-dispatch y #f
-         
+
          (macro-exact-int-dispatch x #f                ;; y = fixnum
            (fixnum-base x y)
            (fixnum-base y (##remainder x y)))
-         
+
          (macro-exact-int-dispatch x #f                ;; y = bignum
            (fixnum-base x (##remainder y x))
-           
+
            ;; fast-gcd requires that its bignum arguments
            ;; are newly allocated.
-           
+
            (fast-gcd
             (if (or new-x?
                     x-negative?
@@ -2151,7 +2315,7 @@
       (type-error-on-x))
 
     (type-error-on-y)                                ;; y = ratnum
-    
+
     (if (##flinteger? y)                             ;; y = flonum
           (macro-number-dispatch x (type-error-on-x)
             (cond ((##eqv? x 0)                ;; x = fixnum
@@ -2202,7 +2366,7 @@
                                    (bignums-case exact-x #t exact-y #t))))))))
                 (type-error-on-x))
             (type-error-on-x)))                ;; x = cpxnum
-    
+
     (type-error-on-y)))                              ;; y = cpxnum
 
 (define-prim-nary (##gcd x y)
@@ -2610,18 +2774,31 @@ for a discussion of branch cuts.
         (##make-rectangular 0 (##asinh (##imag-part z)))
         (let ((sqrt-1-z (##sqrt (##- 1 z)))
               (sqrt-1+z (##sqrt (##+ 1 z))))
-          (##make-rectangular (##atan2 x (##real-part (##* sqrt-1-z sqrt-1+z)))
+          (##make-rectangular (if (and (##= (##abs x) (macro-inexact-+inf))
+                                       (##finite? (##imag-part z)))
+                                  (##flcopysign (macro-inexact-+pi/2) x)
+                                  (##atan2 x (##real-part (##* sqrt-1-z sqrt-1+z))))
                               (##asinh (##imag-part (##* (##conjugate sqrt-1-z) sqrt-1+z))))))))
 
 (define-prim (##casinh z)
   (##* -i (##casin (##* +i z))))
 
 (define-prim (##catanh x+iy)
+
   (define (x/x^2+y^2 x y)
-    (if (##fl< (##flabs y) (##flabs x))
-        (##fl/ (macro-inexact-+1) (##fl+ x (##fl* (##fl/ y x) y)))
-        (let ((x/y (##fl/ x y)))
-          (##fl/ x/y (##fl+ (##fl* x x/y) y)))))
+    (let ((abs-x (flabs x))
+          (abs-y (flabs y)))
+      (cond ((or (= abs-x (macro-inexact-+inf))
+                 (= abs-y (macro-inexact-+inf)))
+             (##flcopysign (macro-inexact-+0) x))
+            ((or (nan? abs-x)
+                 (nan? abs-y))
+             (macro-inexact-+nan))
+            ((fl< abs-y abs-x)
+             (fl/ (macro-inexact-+1) (fl+ x (fl* (fl/ y x) y))))
+            (else
+             (let ((x/y (fl/ x y)))
+               (fl/ x/y (fl+ (fl* x x/y) y)))))))
 
   (define (##->exact-sign x)
     ;; returns an exact number with the same sign as x, returns 1 if x is exact zero
@@ -2645,8 +2822,10 @@ for a discussion of branch cuts.
                                          (##flcopysign pi/2 inexact-y)))
                      ((##fl= inexact-x (macro-inexact-+1))
                       (macro-cpxnum-make
-                       (##fllog (##fl/ (##flsqrt (##flsqrt (##fl+ (macro-inexact-+4) (##flsquare abs-y))))
-                                       (##flsqrt (##fl+ abs-y rho))))
+                       (if (fl= inexact-y (macro-inexact-+0))
+                           (macro-inexact--inf)
+                           (##fllog (##fl/ (##flsqrt (##flsqrt (##fl+ (macro-inexact-+4) (##flsquare abs-y))))
+                                           (##flsqrt (##fl+ abs-y rho)))))
                        (##fl/ (##flcopysign (##fl+ pi/2 (##flatan (##fl/ (##fl+ abs-y rho) (macro-inexact-+2))))
                                             inexact-y)
                               (macro-inexact-+2))))
@@ -2862,7 +3041,7 @@ for a discussion of branch cuts.
       (##log2 x y)))
 
 (define-prim (##log2 x y)
-  
+
   ;; Assumes x is not zero and y is not 0 or 1
 
   (define (positive-exact-real? x)
@@ -5825,47 +6004,47 @@ for a discussion of branch cuts.
   (macro-force-vars (x)
     (##first-set-bit x)))
 
+(define (##bignum.extract-bit-field size position n)
+
+  ;; n is a (possibly unnormalized) nonzero bignum, size and position are nonnegative exact integers
+
+  (let* ((result-bit-length
+          (cond ((##positive? n)
+                 (##fx+ 1 (##min size (##max 0 (##- (##integer-length n) position)))))
+                ((##not (and (##fixnum? size)
+                             (##fx< size ##max-fixnum)))
+                 (##raise-heap-overflow-exception))
+                (else
+                 (##fx+ 1 size))))
+         (result-word-length
+          (##bignum.adigit-div (##fx+ result-bit-length ##bignum.adigit-width -1)))
+         (result
+          (##bignum.arithmetic-shift-into!
+           n (##max ##min-fixnum (##- position)) (##bignum.make result-word-length #f #f))))
+    ;; zero top bits of result and normalize
+    (let ((size-words (##bignum.mdigit-div size))
+          (size-bits  (##bignum.mdigit-mod size)))
+      (##declare (not interrupts-enabled))
+      (let loop ((i (##fx- (##bignum.mdigit-length result) 1)))
+        (if (##fx< size-words i)
+            (begin
+              (##bignum.mdigit-set! result i 0)
+              (loop (##fx- i 1)))
+            (if (##fx= size-words i)
+                (##bignum.mdigit-set!
+                 result i
+                 (##fxand
+                  (##bignum.mdigit-ref result i)
+                  (##fxnot (##fxarithmetic-shift-left -1 size-bits))))))
+        (##bignum.normalize! result)))))
+
 (define-prim&proc (extract-bit-field (size     nonnegative-exact-integer)
                                      (position nonnegative-exact-integer)
                                      (n        exact-integer))
 
-  (define (##bignum.extract-bit-field size position n)
-    
-    ;; n is a (possibly unnormalized) nonzero bignum, size and position are nonnegative exact integers
-    
-    (let* ((result-bit-length
-            (cond ((##positive? n)
-                   (##fx+ 1 (##min size (##max 0 (##- (##integer-length n) position)))))
-                  ((##not (and (##fixnum? size)
-                               (##fx< size ##max-fixnum)))
-                   (##raise-heap-overflow-exception))
-                  (else
-                   (##fx+ 1 size))))
-           (result-word-length
-            (##bignum.adigit-div (##fx+ result-bit-length ##bignum.adigit-width -1)))
-           (result
-            (##bignum.arithmetic-shift-into!
-             n (##max ##min-fixnum (##- position)) (##bignum.make result-word-length #f #f))))
-      ;; zero top bits of result and normalize
-      (let ((size-words (##bignum.mdigit-div size))
-            (size-bits  (##bignum.mdigit-mod size)))
-        (##declare (not interrupts-enabled))
-        (let loop ((i (##fx- (##bignum.mdigit-length result) 1)))
-          (if (##fx< size-words i)
-              (begin
-                (##bignum.mdigit-set! result i 0)
-                (loop (##fx- i 1)))
-              (if (##fx= size-words i)
-                  (##bignum.mdigit-set!
-                   result i
-                   (##fxand
-                    (##bignum.mdigit-ref result i)
-                    (##fxnot (##fxarithmetic-shift-left -1 size-bits))))))
-          (##bignum.normalize! result)))))
-
   (define (fixnum-overflow)
     (##raise-fixnum-overflow-exception extract-bit-field size position n))
-  
+
   (define (general-fixnum-case)
     (macro-if-bignum
      (##bignum.extract-bit-field size position (##fixnum->bignum n))
@@ -5990,6 +6169,513 @@ for a discussion of branch cuts.
             (if (bit-set? j i)
                 (vector-set! vect j #t))
             (loop (fx- j 1)))))))
+
+;;;---------------------------------------------------------------------------
+;;;===========================================================================
+;;;
+;;; Bitwise Operations
+;;;
+;;;===========================================================================
+;;;
+;;;---------------------------------------------------------------------------
+;;; These operations are listed in the same way as in
+;;; https://srfi.schemers.org/srfi-151/srfi-151.html
+;;; Code for procedures already in _num.scm is not included here.
+;;;
+;;; bitwise-not
+;;; bitwise-and   bitwise-ior
+;;; bitwise-xor   bitwise-eqv
+;;; bitwise-nand  bitwise-nor
+;;; bitwise-andc1 bitwise-andc2
+;;; bitwise-orc1  bitwise-orc2
+;;;
+;;; arithmetic-shift bit-count
+;;; integer-length bitwise-if
+;;;---------------------------------------------------------------------------
+
+
+(define-prim&proc (bitwise-if (x exact-integer)
+                              (y exact-integer)
+                              (z exact-integer))
+  (##bitwise-ior2 (##bitwise-and2 x y)
+                  (##bitwise-and2 (##bitwise-not x) z)))
+
+;;;---------------------------------------------------------------------------
+;;; bit-set? copy-bit bit-swap
+;;;---------------------------------------------------------------------------
+
+(define-prim&proc (copy-bit (ind  index)
+                            (i    exact-integer)
+                            (bool boolean))
+
+  (define (fixnum-overflow)
+    (##raise-fixnum-overflow-exception copy-bit ind i bool))
+
+  (define (general-case)
+    (macro-if-bignum
+     (##bitwise-xor2 i (##arithmetic-shift 1 ind))
+     (fixnum-overflow)))
+
+  (if (##eq? bool (##bit-set? ind i))
+      i
+      (macro-exact-int-dispatch-no-error
+       i
+       ;; i a fixnum
+       (if (##< ind ##fixnum-width)
+           (##fxxor i (##fxarithmetic-shift-left 1 ind))
+           (general-case))
+       ;; i a bignum
+       (general-case))))
+
+(define-prim&proc (bit-swap (ind1 index)
+                            (ind2 index)
+                            (i exact-integer))
+  (define (fixnum-overflow)
+    (##raise-fixnum-overflow-exception bit-swap ind i bool))
+
+  (define (general-case)
+    (macro-if-bignum
+     (##bitwise-xor2 (##bitwise-ior2 (##arithmetic-shift 1 ind1)
+                                     (##arithmetic-shift 1 ind2))
+                    i)
+     (fixnum-overflow)))
+
+  (if (##eq? (##bit-set? ind1 i)
+             (##bit-set? ind2 i))
+      i
+      (macro-exact-int-dispatch-no-error
+       i
+       (if (and (##fx< ind1 ##fixnum-width)
+                (##fx< ind2 ##fixnum-width))
+           (##fxxor (##fxior (##fxarithmetic-shift-left 1 ind1)
+                             (##fxarithmetic-shift-left 1 ind2))
+                    i)
+           (general-case))
+       (general-case))))
+
+;;;---------------------------------------------------------------------------
+;;; any-bit-set? every-bit-set?
+;;;---------------------------------------------------------------------------
+
+(define-prim&proc (any-bit-set? (test-bits exact-integer)
+                                (i         exact-integer))
+  (##not (##eqv? (##bitwise-and2 test-bits i) 0)))
+
+(define-prim&proc (every-bit-set? (test-bits exact-integer)
+                                  (i         exact-integer))
+  (##eqv? (##bitwise-and2 test-bits i) test-bits))
+
+;;;---------------------------------------------------------------------------
+;;; first-set-bit
+;;;
+;;; bit-field bit-field-any? bit-field-every?
+;;;---------------------------------------------------------------------------
+
+(define-prim&proc (bit-field (i     exact-integer)
+                             (start index)
+                             (end   index))
+  (if (##fx> start end)
+      (##raise-range-exception end bit-field i start end)
+      (let ((size (##- end start)))
+
+        (define (fixnum-overflow)
+          (##raise-fixnum-overflow-exception bit-field i start end))
+
+        (define (general-fixnum-case)
+          (macro-if-bignum
+           (##extract-bit-field size start (##fixnum->bignum i))
+           (fixnum-overflow)))
+
+        (cond ((##eqv? size 0)
+               0)
+              ((and (##not (##negative? i))
+                    (##fx< (##fx- (##integer-length i) size)
+                           start))
+               (##arithmetic-shift i (##- start)))
+              (else
+               (macro-exact-int-dispatch-no-error
+                i
+                (cond ((##fx< size ##fixnum-width)
+                       (##fxand (##bit-mask size) (##fxarithmetic-shift-right i start)))
+                      ((##fxnegative? i)
+                       (general-fixnum-case))
+                      (else
+                       (##fxarithmetic-shift-right i start)))
+                (##extract-bit-field size start i)))))))
+
+(define-prim&proc (bit-field-any? (i     exact-integer)
+                                  (start index)
+                                  (end   index))
+  (if (##fx> start end)
+      (##raise-range-exception end bit-field-any? i start end)
+      (let ((size (##- end start)))
+        (if (##eqv? size 0)
+            #f
+            (macro-exact-int-dispatch-no-error
+             i
+             ;; fixnum
+             (##not
+              ;; seems easier to check that no bits are set
+              (if (##fx< size ##fixnum-width)
+                  (##eqv? 0 (##fxand (##bit-mask size)
+                                     (##arithmetic-shift i (##- start))))
+                  (##eqv? 0 (##arithmetic-shift i (##- start)))))
+             ;; bignum
+             (##not (##eqv? 0 (##bitwise-and2 (##bit-mask size)
+                                             (##arithmetic-shift i (##- start))))))))))
+
+(define-prim&proc (bit-field-every? (i     exact-integer)
+                                    (start index)
+                                    (end   index))
+  (if (##fx> start end)
+      (##raise-range-exception end bit-field-any? i start end)
+      (let ((size (##- end start)))
+        (if (##eqv? size 0)
+            #t
+            (macro-exact-int-dispatch-no-error
+             i
+             ;; fixnum
+             (if (##fx< size ##fixnum-width)
+                 (let ((mask (##bit-mask size)))
+                   (##eqv? mask (##fxand mask (##arithmetic-shift i (##- start)))))
+                 (##eqv? -1 (##arithmetic-shift i (##- start))))
+             ;; bignum
+             (let ((mask (##bit-mask size)))
+               (##eqv? mask (##bitwise-and2 mask (##arithmetic-shift i (##- start))))))))))
+
+;;;---------------------------------------------------------------------------
+;;; bit-field-clear bit-field-set
+;;;---------------------------------------------------------------------------
+
+(define-prim&proc (bit-field-clear (i     exact-integer)
+                                   (start index)
+                                   (end   index))
+
+  (define (fixnum-overflow)
+    (##raise-fixnum-overflow-exception bit-field-clear i start end))
+
+  (define (general-case size)
+    (macro-if-bignum
+     (##bitwise-and2 i (##bitwise-not (##fxarithmetic-shift-left (##bit-mask size) start)))
+     (fixnum-overflow)))
+
+  (if (##fx> start end)
+      (##raise-range-exception end bit-field-clear i start end)
+      (let ((size (##- end start)))
+        (if (##eqv? size 0)
+            i
+            (macro-exact-int-dispatch-no-error
+             i
+             (cond ((##fx< end ##fixnum-width)
+                    (##fxand i (##fxnot (##fxarithmetic-shift-left (##bit-mask size) start))))
+                   ((##fxnegative? i)
+                    (general-case size))
+                   ((##fx< start ##fixnum-width)
+                    (##fxand i (##fxnot (##fxarithmetic-shift-left -1 start))))
+                   (else
+                    i))
+             (general-case size))))))
+
+(define-prim&proc (bit-field-set (i     exact-integer)
+                                 (start index)
+                                 (end   index))
+
+  (define (fixnum-overflow)
+    (##raise-fixnum-overflow-exception bit-field-set i start end))
+
+  (define (general-case size)
+    (macro-if-bignum
+     (##bitwise-ior2 i (##fxarithmetic-shift-left (##bit-mask size) start))
+     (fixnum-overflow)))
+
+  (if (##fx> start end)
+      (##raise-range-exception end bit-field-set i start end)
+      (let ((size (##- end start)))
+        (if (##eqv? size 0)
+            i
+            (macro-exact-int-dispatch-no-error
+             i
+             (cond ((##< end ##fixnum-width)
+                    (##fxior i (##fxarithmetic-shift-left (##bit-mask size) start)))
+                   ((##not (##fxnegative? i))
+                    (general-case size))
+                   ((##< start ##fixnum-width)
+                    (##fxior i (##fxarithmetic-shift-left -1 start)))
+                   (else
+                    i))
+             (general-case size))))))
+
+;;;---------------------------------------------------------------------------
+;;; bit-field-replace bit-field-replace-same
+;;;---------------------------------------------------------------------------
+
+
+(define-prim&proc (bit-field-replace (dest   exact-integer)
+                                     (source exact-integer)
+                                     (start  index)
+                                     (end    index))
+
+  (if (##fx> start end)
+      (##raise-range-exception end bit-field-replace dest source start end)
+      (let ((size (##- end start)))
+        (if (##eqv? size 0)
+            dest
+            (##replace-bit-field size start source dest)))))
+
+(define-prim&proc (bit-field-replace-same (dest   exact-integer)
+                                          (source exact-integer)
+                                          (start  index)
+                                          (end    index))
+  (##if (##fx> start end)
+        (##raise-range-exception end bit-field-replace-same dest source start end)
+        (let ((size (##- end start)))
+          (if (##eqv? size 0)
+              dest
+              (##copy-bit-field size start source dest)))))
+
+;;;---------------------------------------------------------------------------
+;;; bit-field-rotate bit-field-reverse
+;;;---------------------------------------------------------------------------
+
+(define-prim&proc (bit-field-rotate (n     exact-integer)
+                                    (count exact-integer); can be neg
+                                    (start index)
+                                    (end   index))
+  (if (##< end start)
+      (##raise-range-exception end bit-field-rotate n count start end)
+      (let ((width (##fx- end start)))
+        (if (##eqv? 0 width)
+            n
+            (let* ((count (##modulo count width))
+                   (mask  (##bit-mask width))
+                   (zn    (##bitwise-and2 mask (##arithmetic-shift n (##- start)))))
+              (##bitwise-ior2
+               (##arithmetic-shift
+                (##bitwise-ior2
+                 (##bitwise-and2
+                  mask
+                  (##arithmetic-shift zn count))
+                 (##arithmetic-shift zn (##fx- count width)))
+                start)
+               (##bitwise-and2
+                (##bitwise-not (##arithmetic-shift mask start))
+                n)))))))
+
+(define ##fdigits-per-adigit
+  (##fxquotient ##bignum.adigit-width ##bignum.fdigit-width))
+
+(macro-case-target
+ ((C)
+  (define-macro (macro-bit-reverse-table)
+
+    (define (bit-reverse i)
+      ;; 0 <= i <= (- ##bignum.fdigit-base 1)
+      (let loop ((i i)
+                 (result 0)
+                 (bit 8))
+        (if (eqv? bit 0)
+            result
+            (loop (fxarithmetic-shift-right i 1)
+                  (fxior (fxarithmetic-shift-left result 1)
+                         (fxand i 1))
+                  (fx- bit 1)))))
+
+    `',(list->vector
+        (map bit-reverse (iota 256)))))
+ (else
+  (define-macro (macro-bit-reverse-table)
+
+    (define (bit-reverse i)
+      ;; 0 <= i <= (- ##bignum.fdigit-base 1)
+      (let loop ((i i)
+                 (result 0)
+                 (bit 7))
+        (if (eqv? bit 0)
+            result
+            (loop (fxarithmetic-shift-right i 1)
+                  (fxior (fxarithmetic-shift-left result 1)
+                         (fxand i 1))
+                  (fx- bit 1)))))
+
+    `',(list->vector
+        (map bit-reverse (iota 128))))))
+
+(define-prim&proc (bit-field-reverse (i     exact-integer)
+                                     (start index)
+                                     (end   index))
+
+  (define (bit-reverse i)
+
+    ;; 0 <= i <= (- bignum.fdigit-base 1)
+
+    (define bit-reverse-table (macro-bit-reverse-table))
+
+    (vector-ref bit-reverse-table i))
+
+  (if (##fx< end start)
+      (##raise-range-exception end bit-field-reverse i start end)
+      (let ((width (##fx- end start)))
+        (if (##eqv? width 0)
+            i
+            (let ((reversed-field
+                   (let* ((field
+                           (##bit-field i start end))
+                          (field-fdigit-size
+                           (##fxquotient (fx+ ##bignum.fdigit-width width -1)
+                                         ##bignum.fdigit-width))
+                          (field-bit-size
+                           (##fx* field-fdigit-size ##bignum.fdigit-width)))
+                     (if (##< field-bit-size ##fixnum-width)
+                         ;; fixnum loop
+                         (let loop ((f field)
+                                    (s field-fdigit-size)
+                                    (result 0))
+                           (if (##eqv? s 0)
+                               (##fxarithmetic-shift-right result (##fx- field-bit-size width))
+                               (loop (##fxarithmetic-shift-right f ##bignum.fdigit-width)
+                                     (##fx- s 1)
+                                     (##fxior (##fxarithmetic-shift-left result ##bignum.fdigit-width)
+                                              (bit-reverse (##fxand ##bignum.fdigit-mask f))))))
+                         ;; bignum loop
+                         (let* ((big-field
+                                 (if (##fixnum? field)
+                                     (##fixnum->bignum field)
+                                     field))
+                                (big-field-adigits   ;; want a zero adigit up top
+                                 (##fx+ (##fxquotient (##fx+ field-fdigit-size ##fdigits-per-adigit -1)
+                                                      ##fdigits-per-adigit)
+                                        1))
+                                (big-field-fdigits
+                                 (##fx* big-field-adigits ##fdigits-per-adigit))
+                                (result
+                                 (##bignum.make big-field-adigits big-field #f)))
+                           (let loop ((low 0)
+                                      (high (##fx- big-field-fdigits 1)))
+                             (if (##fx<= low high)
+                                 (let ((temp (##bignum.fdigit-ref result low)))
+                                   ;; redundant but correct when low = high
+                                   (##bignum.fdigit-set! result low  (bit-reverse (##bignum.fdigit-ref result high)))
+                                   (##bignum.fdigit-set! result high (bit-reverse temp))
+                                   (loop (##fx+ low 1)
+                                         (##fx- high 1)))
+                                 (##arithmetic-shift (##bignum.normalize! result) (##fx- width (##fx* big-field-adigits ##bignum.adigit-width))))))))))
+              (##bit-field-replace i reversed-field start end))))))
+
+;;;---------------------------------------------------------------------------
+;;; bits->list list->bits bits->vector vector->bits
+;;; bits
+;;; bitwise-fold bitwise-for-each bitwise-unfold
+;;;---------------------------------------------------------------------------
+
+(define-prim&proc (bitwise-fold (proc procedure)
+                                (seed object)
+                                (i    exact-integer))
+  (macro-exact-int-dispatch-no-error
+   i
+   (let loop ((result seed)
+              (i i)
+              (N (##integer-length i)))
+     (if (##eqv? N 0)
+         result
+         (loop (proc (##fxodd? i) result)
+               (##fxarithmetic-shift-right i 1)
+               (##fx- N 1))))
+   ;; bignum; a linear algorithm in (integer-length i)
+   (let ((N (##integer-length i)))
+     (let loop ((k 0)
+                (result seed))
+       (if (##fx= k N)
+           result
+           (loop (##fx+ k 1)
+                 (proc (##bit-set? k i) result)))))))
+
+(define-prim&proc (bitwise-for-each (proc procedure)
+                                    (i    exact-integer))
+  (macro-exact-int-dispatch-no-error
+   i
+   ;; fixnum
+   (let loop ((i i)
+              (N (##integer-length i)))
+     (if (##< 0 N)
+         (begin
+           (proc (##fxodd? i))
+           (loop (##fxarithmetic-shift-right i 1)
+                 (##fx- N 1)))))
+   ;; bignum, a linear algorithm in (integer-legnth i)
+   (let ((N (##integer-length i)))
+     (let loop ((k 0))
+       (if (##fx< k N)
+           (begin
+             (proc (##bit-set? k i))
+             (loop (##fx+ k 1))))))))
+
+(define-prim&proc (bitwise-unfold (stop?     procedure)
+                                  (mapper    procedure)
+                                  (successor procedure)
+                                  (seed      object))
+
+  (define (fixnum-overflow)
+    (##raise-fixnum-overflow-exception bitwise-unfold stop? mapper successor seed))
+
+  (let loop ((indices '())      ;; indices of 1 bits in result, in decreasing order
+             (index 0)          ;; a bignum here is OK as long as no entries of indices are bignums
+             (state seed))
+    (if (stop? state)
+        (if (or (null? indices)
+                (< (car indices)            ;; largest index
+                   (fx- ##fixnum-width 1))) ;; (expt 2 (- ##fixnum-width 1)) is not a fixnum
+            ;; result is a fixnum
+            (let inner ((result 0)
+                        (indices indices))
+              (if (null? indices)
+                  result
+                  (inner (fxior result
+                                (fxarithmetic-shift-left 1 (car indices)))
+                         (cdr indices))))
+            ;; result is a bignum
+            (macro-if-bignum
+             (let* ((needed-bits
+                     (+ (car indices)
+                        ##bignum.adigit-width
+                        -1))
+                    (result
+                     (if (fixnum? needed-bits)
+                         ;; ##bignum.make requires a fixnum argument, and so does
+                         ;; ##bignum.adigit-div.
+                         (##bignum.make (##bignum.adigit-div needed-bits) #f #f)
+                         ;; can't make a bignum this big.
+                         (##raise-heap-overflow-exception))))
+               (for-each (lambda (index)
+                           (let ((mdigit-index  (##bignum.mdigit-div index))
+                                 (mdigit-offset (##bignum.mdigit-mod index)))
+                             (##bignum.mdigit-set! result
+                                                   mdigit-index
+                                                   (fxior (##bignum.mdigit-ref result mdigit-index)
+                                                          (fxarithmetic-shift-left 1 mdigit-offset)))))
+                         indices)
+               (##bignum.normalize! result))
+             (fixnum-overflow)))
+        (loop (if (mapper state)
+                  (cons index indices)
+                  indices)
+              (+ index 1)
+              (successor state)))))
+
+;;;---------------------------------------------------------------------------
+;;; make-bitwise-generator
+;;;---------------------------------------------------------------------------
+
+(define-prim&proc (make-bitwise-generator (i exact-integer))
+  (let ((index 0))
+    (lambda ()
+      (let ((result (##bit-set? index i)))
+        (set! index (##+ index 1))  ;;; this could be a bignum
+        result))))
+
+;;;---------------------------------------------------------------------------
+;;; END
+;;;---------------------------------------------------------------------------
+
 
 ;;;----------------------------------------------------------------------------
 
@@ -6619,12 +7305,15 @@ for a discussion of branch cuts.
  ((C)
   (begin)) ;; ##bignum.fdigit-width defined in _kernel.scm
 
- (else 
+ (else
   (define ##bignum.fdigit-width 7))
  )
 
 (define ##bignum.fdigit-base
-    (##fxarithmetic-shift-left 1 ##bignum.fdigit-width))
+  (##fxarithmetic-shift-left 1 ##bignum.fdigit-width))
+
+(define ##bignum.fdigit-mask
+  (##fx- ##bignum.fdigit-base 1))
 
 (define ##bignum.mdigit-base
   (##fxarithmetic-shift-left 1 ##bignum.mdigit-width))
@@ -6902,9 +7591,6 @@ for a discussion of branch cuts.
 
   ;; assumes that mdigits are 14 bits wide and fdigits are
   ;; halves of mdigits
-
-  (define ##bignum.fdigit-mask
-    (##fx- ##bignum.fdigit-base 1))
 
   ;; Returns the number of fdigits in x
 
@@ -10418,7 +11104,7 @@ end-of-code
           (##fx* (##bignum.adigit-div low-bits) ;; Shift full adigits.
                  ##bignum.adigit-width)
           0)))
-  
+
   (let ((x-length (##bignum.mdigit-length x))
         (y-length (##bignum.mdigit-length y)))
     (cond ((or (##fx< x-length 20)
@@ -10948,13 +11634,15 @@ end-of-code
   (define (big-quotient x y)
     (let* ((x-negative? (##negative? x))
            (abs-x (if x-negative?
-                      (##negate x)
+                      (begin
+                        ;; (##negate ##min-fixnum) always returns the same bignum!
+                        ;; So don't have ##bignum.div overwrite it!
+                        (set! keep-dividend? (##eqv? x ##min-fixnum))
+                        (##negate x))
                       x))
            (y-negative? (##negative? y))
            (abs-y (if y-negative?
-                      (begin
-                        (set! keep-dividend? #f)
-                        (##negate y))
+                      (##negate y)
                       y)))
       (if (##< abs-x abs-y)
           (macro-make-qr 0 x)
@@ -10987,8 +11675,8 @@ end-of-code
            (macro-exact-int-dispatch-no-error y ;; x = fixnum
              (macro-make-qr (##fxquotient x y) ;; note: y can't be -1
                             (##fxremainder x y))
-             (if (##fx< 1 (##bignum.adigit-length y))
-                 ;; y has at least two adigits, so
+             (if (##fx< (macro-min-bignum-adigits) (##bignum.adigit-length y))
+                 ;; y has at least enough adigits, so
                  ;; (abs y) > (abs x)
                  (macro-make-qr 0 x)
                  (big-quotient x y)))
@@ -11770,19 +12458,19 @@ end-of-code
 
   #|
   This function is from
-  
+
   Functions from
   Branch Cuts for Complex Elementary Functions
   or
   Much Ado About Nothing's Sign Bit
   by W. Kahan
-  
+
   Full reference:
-  
+
   Kahan, W: Branch cuts for complex elementary functions; or,
   Much ado about nothing's sign bit. In Iserles, A., and Powell, M. (eds.),
   The state of the art in numerical analysis. Clarendon Press (1987) pp 165-211.
-  
+
   Code to compute the constants using my computable reals package.
 
   (load "exact-reals")
@@ -11801,7 +12489,7 @@ end-of-code
   (for-each pretty-print
             `((define r2 ,r2) (define r2p1 ,r2p1) (define t2p1 ,t2p1)))
   |#
-  
+
   (define r2 1.4142135623730951)
   (define r2p1 2.414213562373095)
   (define t2p1 1.2537167179050217e-16)
@@ -11831,7 +12519,7 @@ end-of-code
     (if (##fl< x y)
         (continue y x)
         (continue x y))))
-  
+
 (define-prim-flonum (flhypot x y)
   (##flhypot x y))
 

@@ -1,24 +1,3 @@
-.g-console .CodeMirror {
-  font-family: "Hack", "Andale Mono", Courier, Monaco, monospace;
-  height: auto;
-}
-
-.g-console .CodeMirror-line,
-.g-console .g-console-input {
-  font-weight: bold;
-}
-
-.g-console .CodeMirror-matchingbracket {
-  background-color: #ddd;
-}
-
-.g-console .g-console-output {
-  font-weight: normal;
-}
-
-.g-console .g-console-transcript {
-}
-
 body {
   --g-attention-color: black;
   --g-attention-background: hsl(34, 100%, 70%);
@@ -33,7 +12,7 @@ body {
   --g-tab-background-hover: #F9F9F9;
   --g-tab-separator-width: 1px;
   --g-tab-separator-color: var(--g-border-color);
-  --g-radius: 0.25em;
+  --g-radius: 6px;
   --g-tab-padding: 0.5em;
   --g-btn-border-color: transparent;
   --g-btn-radius: var(--g-radius);
@@ -42,8 +21,15 @@ body {
   --g-btn-separator-color: hsl(220, 100%, 80%);
   --g-dropdown-menu-background: var(--g-tab-background-hover);
   --g-height: 75vh;
+  --g-margin: 2px;
   --g-splitter-width: 0.5em;
-//  font-size: 200%;
+  --g-splitter-ratio: 55%;
+  --g-scrollbar-color: var(--g-tab-color-deactivated);
+  --g-scrollbar-background: transparent;
+  --g-matching-bracket-background: #dcdcdc;
+  --g-highlight-color: #ffff00;
+  --g-code-font: 'Hack', 'Lucida Console', Monaco, ui-monospace, monospace;
+/*  font-size: 200%; */
 }
 
 div.g-tab-group {
@@ -177,7 +163,7 @@ div.g-tab-group > ul:first-child > li > div > div.g-dropdown-menu {
 }
 
 div.g-tab-group > ul:first-child > li > div > div.g-dropdown-menu > div[data-g-dropdown-menu-selectable]:hover {
-  background: #f0f0f0;
+  background: #e0e0e0;
 }
 
 div.g-tab-group > ul:first-child > li > div > div.g-dropdown-menu > hr {
@@ -218,35 +204,69 @@ div.g-tab-group > div:last-child > div[data-g-active] {
   display: block;
 }
 
-.g-editor .CodeMirror,
-.g-console .CodeMirror {
-  font-family: "Hack", Monaco, monospace;
-  height: auto;
-  margin: 2px;
-  background: transparent;
+.g-editor[data-g-editor-view=text] > .g-editor-text,
+.g-editor[data-g-editor-view=html] > .g-editor-html {
+  display: block;
 }
 
+.g-editor:not([data-g-editor-view=text]) > .g-editor-text,
+.g-editor:not([data-g-editor-view=html]) > .g-editor-html {
+  display: none;
+}
+
+.g-editor-html,
+.g-extra-body,
 .g-editor .CodeMirror-scroll,
 .g-console .CodeMirror-scroll {
   min-height: var(--g-height);
   max-height: var(--g-height);
 }
 
-.g-console .CodeMirror-line,
-.g-console .g-console-input {
-  font-weight: bold;
+.g-editor-html {
+  margin: var(--g-margin);
+  overflow-y: auto;
+}
+
+.g-editor .CodeMirror,
+.g-console .CodeMirror {
+  font-family: var(--g-code-font);
+  height: auto;
+  margin: var(--g-margin);
+  background: transparent;
 }
 
 .g-editor .CodeMirror-matchingbracket,
 .g-console .CodeMirror-matchingbracket {
-  background-color: #ddd;
+  background-color: var(--g-matching-bracket-background);
 }
 
-.g-console .g-console-output {
+/* style for console input */
+.g-console span:not(.g-console-transcript) {
+  font-weight: bold;
+}
+
+/* style for console output (overrides the console input style) */
+.g-console span.g-console-output {
   font-weight: normal;
 }
 
-.g-console .g-console-transcript {
+/* style for highlighted text */
+.g-editor span.g-highlight,
+.g-console span.g-highlight {
+  background-color: var(--g-highlight-color);
+}
+
+.g-editor .g-highlight-eol > span,
+.g-console .g-highlight-eol > span {
+  display: flex;
+  width: 100%;
+}
+
+.g-editor .g-highlight-eol > span:after,
+.g-console .g-highlight-eol > span:after {
+  flex-grow: 1;
+  content: " ";
+  background-color: var(--g-highlight-color);
 }
 
 .g-console-multiplexer {
@@ -274,13 +294,13 @@ div.g-tab-group > div:last-child > div[data-g-active] {
 
 .g-v-panes > .g-pane-rigid {
   width: 100%;
-  height: 65%;
+  height: var(--g-splitter-ratio);
   min-height: 30%;
 }
 
 .g-h-panes > .g-pane-rigid {
   height: 100%;
-  width: 65%;
+  width: var(--g-splitter-ratio);
   min-width: 30%;
 }
 
@@ -290,13 +310,13 @@ div.g-tab-group > div:last-child > div[data-g-active] {
 
 .g-v-panes > .g-pane-elastic {
   width: 100%;
-  height: 35%;
+  height: calc(100%-var(--g-splitter-ratio));
   min-height: 30%;
 }
 
 .g-h-panes > .g-pane-elastic {
   height: 100%;
-  width: 35%;
+  width: calc(100%-var(--g-splitter-ratio));
   min-width: 30%;
 }
 
@@ -309,12 +329,141 @@ div.g-tab-group > div:last-child > div[data-g-active] {
   cursor: row-resize;
   flex: 0 0;
   padding: var(--g-splitter-width) 100% 0 0;
-//  background-color: rgba(0,0,0,0.1);
+/*  background-color: rgba(0,0,0,0.1); */
 }
 
 .g-h-panes > .g-pane-splitter {
   cursor: col-resize;
   flex: 0 0;
   padding: var(--g-height) var(--g-splitter-width) 0 0;
-//  background-color: rgba(0,0,0,0.1);
+/*  background-color: rgba(0,0,0,0.1); */
+}
+
+/* Works on Firefox */
+.g-console .CodeMirror-vscrollbar,
+.g-console .CodeMirror-hscrollbar,
+.g-editor .CodeMirror-vscrollbar,
+.g-editor .CodeMirror-hscrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--g-scrollbar-color) var(--g-scrollbar-background);
+}
+
+/* Works on Chrome, Edge, and Safari */
+.g-console .CodeMirror-vscrollbar::-webkit-scrollbar,
+.g-console .CodeMirror-hscrollbar::-webkit-scrollbar,
+.g-editor .CodeMirror-vscrollbar::-webkit-scrollbar,
+.g-editor .CodeMirror-hscrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.g-console .CodeMirror-vscrollbar::-webkit-scrollbar-track,
+.g-console .CodeMirror-hscrollbar::-webkit-scrollbar-track,
+.g-editor .CodeMirror-vscrollbar::-webkit-scrollbar-track,
+.g-editor .CodeMirror-hscrollbar::-webkit-scrollbar-track {
+  background: var(--g-scrollbar-background);
+}
+
+.g-console .CodeMirror-vscrollbar::-webkit-scrollbar-thumb,
+.g-console .CodeMirror-hscrollbar::-webkit-scrollbar-thumb,
+.g-editor .CodeMirror-vscrollbar::-webkit-scrollbar-thumb,
+.g-editor .CodeMirror-hscrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--g-scrollbar-color);
+  border-radius: 20px;
+  border: 3px solid var(--g-scrollbar-background);
+}
+
+.g-ui kbd {
+  padding: .1rem .3rem;
+  font-size: 87.5%;
+  color: #fff;
+  background-color: #212529;
+  border-radius: .2rem;
+}
+
+table.g-right-justify td:nth-child(1) {
+  text-align: right;
+}
+
+.g-code-example {
+  position: relative;
+  overflow: auto;
+  background-color: #f4f4f4;
+  margin: 5px 0;
+  padding: 1rem 0 1rem 1rem;
+  margin-left: 2rem;
+  margin-right: 2rem;
+  border-radius: 6px;
+}
+
+.g-code-example > button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: .7rem;
+  font-weight: bold;
+  padding: 0 2px;
+  border: solid 1px #808080;
+  border-radius: 6px;
+}
+
+.g-code-example-filename {
+  font-family: var(--g-code-font);
+  font-size: .7rem;
+  font-style: italic;
+  text-align: center;
+  padding: 0;
+}
+
+.g-ui button {
+  padding: 2px 4px;
+  border-radius: 6px;
+  border: none;
+  background: #e8e8e8;
+  color: #000000;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+.g-ui button:not(:disabled):hover {
+  background: #a0a0a0;
+}
+
+.g-extra {
+    border: 1px solid #ededef;
+}
+
+.g-extra-header {
+  background-color: #fafafa;
+  text-align: center;
+}
+
+.g-extra-header > button {
+  font-weight: bold;
+  margin: 2px;
+}
+
+.g-extra-header > button:disabled {
+  color: #909090;
+}
+
+.g-h-panes > .g-extra {
+  width: 35%;
+}
+
+.g-v-panes > .g-extra {
+  height: 35%;
+}
+
+.g-h-panes > .g-console-multiplexer {
+  width: 12%;
+}
+
+.g-v-panes > .g-console-multiplexer {
+  height: 12%;
+}
+
+.g-extra-body {
+  padding: 2px;
+  overflow-y: scroll;
 }

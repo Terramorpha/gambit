@@ -148,23 +148,23 @@
 
 ("bitwise-and"                        0     #f 0     0    integer r6rs)
 ("##bitwise-and"                      0     #f ()    0    integer extended)
-("bitwise-andc1"                      (2)   #f ()    0    integer extended)
+("bitwise-andc1"                      (2)   #f ()    0    integer gambit)
 ("##bitwise-andc1"                    (2)   #f ()    0    integer extended)
-("bitwise-andc2"                      (2)   #f ()    0    integer extended)
+("bitwise-andc2"                      (2)   #f ()    0    integer gambit)
 ("##bitwise-andc2"                    (2)   #f ()    0    integer extended)
-("bitwise-eqv"                        0     #f 0     0    integer extended)
+("bitwise-eqv"                        0     #f 0     0    integer gambit)
 ("##bitwise-eqv"                      0     #f ()    0    integer extended)
 ("bitwise-ior"                        0     #f 0     0    integer r6rs)
 ("##bitwise-ior"                      0     #f ()    0    integer extended)
-("bitwise-nand"                       (2)   #f ()    0    integer extended)
+("bitwise-nand"                       (2)   #f ()    0    integer gambit)
 ("##bitwise-nand"                     (2)   #f ()    0    integer extended)
-("bitwise-nor"                        (2)   #f ()    0    integer extended)
+("bitwise-nor"                        (2)   #f ()    0    integer gambit)
 ("##bitwise-nor"                      (2)   #f ()    0    integer extended)
 ("bitwise-not"                        (1)   #f 0     0    integer r6rs)
 ("##bitwise-not"                      (1)   #f ()    0    integer extended)
-("bitwise-orc1"                       (2)   #f ()    0    integer extended)
+("bitwise-orc1"                       (2)   #f ()    0    integer gambit)
 ("##bitwise-orc1"                     (2)   #f ()    0    integer extended)
-("bitwise-orc2"                       (2)   #f ()    0    integer extended)
+("bitwise-orc2"                       (2)   #f ()    0    integer gambit)
 ("##bitwise-orc2"                     (2)   #f ()    0    integer extended)
 ("bitwise-xor"                        0     #f 0     0    integer r6rs)
 ("##bitwise-xor"                      0     #f ()    0    integer extended)
@@ -337,7 +337,7 @@
 ("##fxbit-set?"                       (2)   #f ()    0    fixnum  extended)
 ("fxeven?"                            (1)   #f 0     0    boolean r6rs)
 ("##fxeven?"                          (1)   #f ()    0    boolean extended)
-("fxeqv"                              0     #f 0     0    fixnum  extended)
+("fxeqv"                              0     #f 0     0    fixnum  gambit)
 ("##fxeqv"                            0     #f ()    0    fixnum  extended)
 ("fxfirst-set-bit"                    (1)   #f 0     0    fixnum  r6rs)
 ("##fxfirst-set-bit"                  (1)   #f ()    0    fixnum  extended)
@@ -355,17 +355,17 @@
 ("##fxmodulo"                         (2)   #f ()    0    fixnum  extended)
 ("fxnegative?"                        (1)   #f 0     0    boolean r6rs)
 ("##fxnegative?"                      (1)   #f ()    0    boolean extended)
-("fxnand"                             (2)   #f 0     0    fixnum  extended)
+("fxnand"                             (2)   #f 0     0    fixnum  gambit)
 ("##fxnand"                           (2)   #f ()    0    fixnum  extended)
-("fxnor"                              (2)   #f 0     0    fixnum  extended)
+("fxnor"                              (2)   #f 0     0    fixnum  gambit)
 ("##fxnor"                            (2)   #f ()    0    fixnum  extended)
 ("fxnot"                              (1)   #f 0     0    fixnum  r6rs)
 ("##fxnot"                            (1)   #f ()    0    fixnum  extended)
 ("fxodd?"                             (1)   #f 0     0    boolean r6rs)
 ("##fxodd?"                           (1)   #f ()    0    boolean extended)
-("fxorc1"                             (2)   #f 0     0    fixnum  extended)
+("fxorc1"                             (2)   #f 0     0    fixnum  gambit)
 ("##fxorc1"                           (2)   #f ()    0    fixnum  extended)
-("fxorc2"                             (2)   #f 0     0    fixnum  extended)
+("fxorc2"                             (2)   #f 0     0    fixnum  gambit)
 ("##fxorc2"                           (2)   #f ()    0    fixnum  extended)
 ("fxpositive?"                        (1)   #f 0     0    boolean r6rs)
 ("##fxpositive?"                      (1)   #f ()    0    boolean extended)
@@ -1625,6 +1625,9 @@
 ("##primitive-trylock!"               (3)   #t ()    0    #f      extended)
 ("##primitive-unlock!"                (3)   #t ()    0    #f      extended)
 
+("##cpu-cycle-count-start"            (0)   #t ()    0    fixnum  extended)
+("##cpu-cycle-count-end"              (0)   #t ()    0    fixnum  extended)
+
 ;; miscellaneous
 
 ("eq?"                                (2)   #f 0     0    boolean ieee)
@@ -1640,7 +1643,7 @@
 ("void"                               (0)   #f 0     0    #f      gambit)
 ("##void"                             (0)   #f ()    0    #f      extended)
 
-("dead-end"                           (0)   #t 0     0    #f      extended)
+("dead-end"                           (0)   #t 0     0    #f      gambit)
 ("##dead-end"                         (0)   #t ()    0    #f      extended)
 
 ;; for system interface
@@ -4881,6 +4884,7 @@
 
   (define (make-vector-expanders
            vect-kind
+           default-init-val
            make-vect-str
            subvect-str
            vect-copy-str
@@ -4985,9 +4989,20 @@
                       size-value-check)))
 
             (define (call-make-vect small? env)
-              (gen-call-prim-vars-notsafe source env
-               (if small? **make-vect-small-sym **make-vect-sym)
-               vars))
+              (let ((prim (if small? **make-vect-small-sym **make-vect-sym)))
+                (if (and (pair? vars)
+                         (null? (cdr vars))
+                         (safe? env)) ;; make sure there's an init in safe mode
+                    (let ((env (add-not-safe env)))
+                      (gen-call-prim source env
+                        prim
+                        (list (new-ref source env
+                                (car vars))
+                              (new-cst source env
+                                default-init-val))))
+                    (gen-call-prim-vars-notsafe source env
+                     prim
+                     vars))))
 
             (define (call-make-vect-possibly-small-alloc env)
               (let* ((limit
@@ -5176,6 +5191,7 @@
 
   (make-vector-expanders
    'vector
+   0
    "make-vector"
    "subvector"
    "vector-copy"
@@ -5205,6 +5221,7 @@
 
   (make-vector-expanders
    'string
+   (integer->char 0)
    "make-string"
    "substring"
    "string-copy"
@@ -5237,6 +5254,7 @@
 
   (make-vector-expanders
    's8vector
+   0
    "make-s8vector"
    "subs8vector"
    "s8vector-copy"
@@ -5266,6 +5284,7 @@
 
   (make-vector-expanders
    'u8vector
+   0
    "make-u8vector"
    "subu8vector"
    "u8vector-copy"
@@ -5295,6 +5314,7 @@
 
   (make-vector-expanders
    's16vector
+   0
    "make-s16vector"
    "subs16vector"
    "s16vector-copy"
@@ -5324,6 +5344,7 @@
 
   (make-vector-expanders
    'u16vector
+   0
    "make-u16vector"
    "subu16vector"
    "u16vector-copy"
@@ -5354,6 +5375,7 @@
 #;
   (make-vector-expanders
    's32vector
+   0
    "make-s32vector"
    "subs32vector"
    "s32vector-copy"
@@ -5384,6 +5406,7 @@
 #;
   (make-vector-expanders
    'u32vector
+   0
    "make-u32vector"
    "subu32vector"
    "u32vector-copy"
@@ -5414,6 +5437,7 @@
 #;
   (make-vector-expanders
    's64vector
+   0
    "make-s64vector"
    "subs64vector"
    "s64vector-copy"
@@ -5444,6 +5468,7 @@
 #;
   (make-vector-expanders
    'u64vector
+   0
    "make-u64vector"
    "subu64vector"
    "u64vector-copy"
@@ -5473,6 +5498,7 @@
 
   (make-vector-expanders
    'f32vector
+   (macro-inexact-+0)
    "make-f32vector"
    "subf32vector"
    "f32vector-copy"
@@ -5502,6 +5528,7 @@
 
   (make-vector-expanders
    'f64vector
+   (macro-inexact-+0)
    "make-f64vector"
    "subf64vector"
    "f64vector-copy"
@@ -6055,6 +6082,20 @@
 (def-simp "flatanh"          (constant-folder-flo atanh      flo?))
 (def-simp "##flonum->fixnum" (constant-folder-fix inexact->exact flo?))
 (def-simp "fixnum->flonum"   (constant-folder-flo exact->inexact fix32?))
+
+(let ()
+  (define (nonneg-fix32? x) (and (fix32? x) (>= x 0)))
+  (define (shift-left n shift) (arithmetic-shift n shift))
+  (define (shift-left? n shift) (and (>= shift 0) (shift-left n shift)))
+  (define (shift-right n shift) (arithmetic-shift n (- shift)))
+  (define (shift-right? n shift) (and (>= shift 0) (shift-right n shift)))
+  (def-simp "arithmetic-shift"          (constant-folder-gen shift-left int?))
+  (def-simp "fxarithmetic-shift"        (constant-folder-fix shift-left fix32?))
+  (def-simp "fxarithmetic-shift?"       (constant-folder-fix shift-left fix32?))
+  (def-simp "fxarithmetic-shift-left"   (constant-folder-fix shift-left (list fix32? nonneg-fix32?)))
+  (def-simp "fxarithmetic-shift-left?"  (constant-folder-fix shift-left? fix32?))
+  (def-simp "fxarithmetic-shift-right"  (constant-folder-fix shift-right (list fix32? nonneg-fix32?)))
+  (def-simp "fxarithmetic-shift-right?" (constant-folder-fix shift-right? fix32?)))
 
 (def-simp "fxand"            (constant-folder-fix fxand   fix32?))
 (def-simp "fxandc1"          (constant-folder-fix fxandc1 fix32?))

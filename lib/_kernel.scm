@@ -2,7 +2,7 @@
 
 ;;; File: "_kernel.scm"
 
-;;; Copyright (c) 1994-2022 by Marc Feeley, All Rights Reserved.
+;;; Copyright (c) 1994-2023 by Marc Feeley, All Rights Reserved.
 
 ;;;============================================================================
 
@@ -1359,31 +1359,8 @@ end-of-code
 
   (let loop ()
     (let ((id
-           (##c-code #<<end-of-code
-
-            ___RESULT = ___FAL;
-
-            ___EXT(___begin_interrupt_service_pstate) (___ps);
-
-            if (___ps->intr_enabled != ___FIX(0))
-              {
-                int i;
-
-                for (i=0; i<___NB_INTRS; i++)
-                  if (___EXT(___check_interrupt_pstate) (___ps, i))
-                    break;
-
-                ___EXT(___end_interrupt_service_pstate) (___ps, i+1);
-
-                if (i < ___NB_INTRS)
-                  ___RESULT = ___FIX(i);
-              }
-            else
-              ___EXT(___end_interrupt_service_pstate) (___ps, 0);
-
-end-of-code
-)))
-
+           (##c-code
+            "___RESULT = ___EXT(___service_interrupts_pstate) (___ps);")))
       (if id
           (let ((handler
                  (or (##vector-ref ##interrupt-vector id)
@@ -1399,7 +1376,7 @@ end-of-code
                 (handler)))))))
 
 (define ##interrupt-vector
-  (##vector ##sync-op-interrupt! #f #f #f #f #f #f #f))
+  (##vector ##sync-op-interrupt! #f #f #f #f #f #f))
 
 (define-prim (##interrupt-vector-set! code handler)
   (##declare (not interrupts-enabled))
@@ -1446,26 +1423,25 @@ end-of-code
 
 ;;;----------------------------------------------------------------------------
 
-;; The high-level interrupt is used for interprocessor interruption
-;; initiated at the Scheme level.
+;; High-level interrupts are handled by the Scheme thread scheduler on a
+;; specific processor.
 
-(define-prim (##raise-high-level-interrupt! processor-id)
+(define-prim (##raise-high-level-interrupt processor-id intr)
   (##declare (not interrupts-enabled))
   (##c-code #<<end-of-code
 
-   {
-     ___processor_state ps =
-       ___PSTATE_FROM_PROCESSOR_ID(___INT(___ARG1),
-                                   ___VMSTATE_FROM_PSTATE(___ps));
+   ___processor_state ps =
+     ___PSTATE_FROM_PROCESSOR_ID(___INT(___ARG1),
+                                 ___VMSTATE_FROM_PSTATE(___ps));
 
-     ___raise_interrupt_pstate (ps, ___INTR_HIGH_LEVEL);
+   ___raise_high_level_interrupt_pstate (ps, ___ARG2);
 
-     ___RESULT = ___VOID;
-   }
+   ___RESULT = ___VOID;
 
 end-of-code
 
-   processor-id))
+   processor-id
+   intr))
 
 ))
 
@@ -2245,6 +2221,9 @@ end-of-code
        ___FIX(___cpu_cache_size (!___FALSEP(___ARG1), ___INT(___ARG2)));"
    instruction-cache
    level))
+
+(define-prim (##cpu-cycle-count-start) 0)
+(define-prim (##cpu-cycle-count-end)   0)
 
 (define-prim (##core-count)
   (##declare (not interrupts-enabled))
@@ -4545,6 +4524,11 @@ end-of-code
 
 ;;; Filesystem path manipulation.
 
+(define-prim ##os-path-tempdir
+  (c-lambda ()
+            scheme-object
+   "___os_path_tempdir"))
+
 (define-prim ##os-path-homedir
   (c-lambda ()
             scheme-object
@@ -4845,8 +4829,22 @@ end-of-code
 
 (define-prim (##os-condvar-select! devices timeout)
   (##declare (not interrupts-enabled))
-  (##c-code
-   "___RESULT = ___os_condvar_select (___ARG1, ___ARG2);"
+  (##c-code #<<end-of-code
+
+   ___SCMOBJ result;
+
+   ___FRAME_STORE_RA(___R0)
+   ___W_ALL
+
+   result = ___os_condvar_select (___ARG1, ___ARG2);
+
+   ___R_ALL
+   ___SET_R0(___FRAME_FETCH_RA)
+
+   ___RESULT = result;
+
+end-of-code
+
    devices
    timeout))
 
@@ -5112,38 +5110,28 @@ end-of-code
 
 ;;; Version information.
 
-(define-prim (##system-version)
+(define-prim&proc (system-version)
 
   (##define-macro (comp-version)
     (c#compiler-version))
 
   (comp-version))
 
-(define-prim (system-version)
-  (##system-version))
-
 (define ##os-system-version-string-saved
   (let ()
 
-    (##define-macro (comp-version-string)
-      (c#compiler-version-string))
+    (##define-macro (comp-system-version-string)
+      (system-version-string))
 
     (macro-case-target
      ((C)
       (or ((c-lambda () char-string "___return(___STAMP_VERSION);"))
-          (comp-version-string)))
+          (comp-system-version-string)))
      (else
-      (comp-version-string)))))
+      (comp-system-version-string)))))
 
-(define-prim (##system-version-string)
+(define-prim&proc (system-version-string)
   ##os-system-version-string-saved)
-
-(define-prim (system-version-string)
-  (##system-version-string))
-
-(macro-case-target
-
- ((C)
 
 (define ##os-system-type-saved
   (let ()
@@ -5154,44 +5142,65 @@ end-of-code
           (##cons (##make-interned-symbol (##car lst))
                   (str-list->sym-list (##cdr lst)))))
 
-    (str-list->sym-list
-     ((c-lambda ()
-                nonnull-char-string-list
-       "___os_system_type")))))
+    (macro-case-target
+     ((C)
+      (str-list->sym-list
+       ((c-lambda ()
+                  nonnull-char-string-list
+          "___os_system_type"))))
+     (else
+      '(unknown system type)))))
 
-(define-prim (system-type)
+(define-prim&proc (system-type)
   ##os-system-type-saved)
 
 (define ##os-system-type-string-saved
-  ((c-lambda ()
-             nonnull-char-string
-    "___os_system_type_string")))
+  (macro-case-target
+   ((C)
+    ((c-lambda ()
+               nonnull-char-string
+      "___os_system_type_string")))
+   (else
+    "unknown-system-type")))
 
-(define-prim (system-type-string)
+(define-prim&proc (system-type-string)
   ##os-system-type-string-saved)
 
 (define ##os-configure-command-string-saved
-  ((c-lambda ()
-             nonnull-char-string
-    "___os_configure_command_string")))
+  (let ()
 
-(define-prim (configure-command-string)
+    (##define-macro (comp-configure-command-string)
+      (configure-command-string))
+
+    (macro-case-target
+     ((C)
+      ((c-lambda ()
+                 nonnull-char-string
+        "___os_configure_command_string")))
+     (else
+      (comp-configure-command-string)))))
+
+(define-prim&proc (configure-command-string)
   ##os-configure-command-string-saved)
 
 (define ##system-stamp-saved
-  ((c-lambda ()
-             unsigned-int64
-    "___return(___U64_add_U64_U64
-                 (___U64_mul_UM32_UM32 (___STAMP_YMD, 1000000),
-                  ___U64_from_UM32 (___STAMP_HMS)));")))
+  (let ()
 
-(define-prim (##system-stamp)
+    (##define-macro (comp-system-stamp)
+      (system-stamp))
+
+    (macro-case-target
+     ((C)
+      ((c-lambda ()
+                 unsigned-int64
+        "___return(___U64_add_U64_U64
+                   (___U64_mul_UM32_UM32 (___STAMP_YMD, 1000000),
+                    ___U64_from_UM32 (___STAMP_HMS)));")))
+     (else
+      (comp-system-stamp)))))
+
+(define-prim&proc (system-stamp)
   ##system-stamp-saved)
-
-(define-prim (system-stamp)
-  (##system-stamp))
-
-))
 
 ;;;----------------------------------------------------------------------------
 

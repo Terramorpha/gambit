@@ -2,7 +2,7 @@
 
 ;;; File: "_univlib.scm"
 
-;;; Copyright (c) 1994-2022 by Marc Feeley, All Rights Reserved.
+;;; Copyright (c) 1994-2023 by Marc Feeley, All Rights Reserved.
 
 ;;;============================================================================
 
@@ -619,6 +619,7 @@ import stat
 import time
 import errno
 import getpass
+import tempfile
 import functools
 
 def @os_encode_error@(exn):
@@ -816,12 +817,11 @@ def @os_device_from_basic_console@():
 
 (define ##os-bat-extension-string-saved "")
 (define ##os-exe-extension-string-saved "")
-(define ##os-configure-command-string-saved "./configure")
-(define ##os-system-type-string-saved "unknown-system-type")
-(define (##system-stamp) 20200101213000)
 
 (define (##get-parallelism-level) 1)
 (define (##cpu-count) 1)
+(define (##cpu-cycle-count-start) 0)
+(define (##cpu-cycle-count-end)   0)
 (define (##current-vm-resize vm n) #f)
 
 (define (##get-standard-level) 0)
@@ -1395,6 +1395,26 @@ def @os_shell_command@(cmd):
 
 ;;;----------------------------------------------------------------------------
 
+;;; Temporary directory.
+
+(define (##os-path-tempdir)
+  (##declare (not interrupts-enabled))
+  (cond-expand
+
+   ((compilation-target js)
+    (##inline-host-expression
+     "@host2scm@(@os_nodejs@ ? os.tmpdir() : '/tmp')"))
+
+   ((compilation-target python)
+    (##inline-host-expression
+     "@host2scm@(tempfile.gettempdir())"))
+
+   (else
+    (println "unimplemented ##os-path-tempdir called")
+    "/tmp")))
+
+;;;----------------------------------------------------------------------------
+
 ;;; Home directory.
 
 (define (##os-path-homedir)
@@ -1760,7 +1780,8 @@ def @os_set_module_whitelist@(whitelist):
   (cond-expand
 
     ((compilation-target js python)
-     (##inline-host-expression "@host2scm@(@os_get_module_whitelist@())"))
+     (##vector->list
+      (##inline-host-expression "@host2scm@(@os_get_module_whitelist@())")))
 
     (else
      (println "unimplemented ##get-module-whitelist called")
@@ -1774,12 +1795,12 @@ def @os_set_module_whitelist@(whitelist):
     ((compilation-target js)
      (##inline-host-statement
       "@os_set_module_whitelist@(@scm2host@(@1@));"
-      whitelist))
+      (##list->vector whitelist)))
 
     ((compilation-target python)
      (##inline-host-statement
       "@os_set_module_whitelist@(@scm2host@(@1@))"
-      whitelist))
+      (##list->vector whitelist)))
 
     (else
      (println "unimplemented ##set-module-whitelist! called"))))
@@ -1788,7 +1809,7 @@ def @os_set_module_whitelist@(whitelist):
 (define (##get-module-search-order) ##module-search-order-var)
 (define (##set-module-search-order! x) (set! ##module-search-order-var x))
 
-(define ##module-install-mode-var 1)
+(define ##module-install-mode-var (macro-module-install-mode-ask-never))
 (define (##get-module-install-mode) ##module-install-mode-var)
 (define (##set-module-install-mode x) (set! ##module-install-mode-var x))
 
@@ -4170,13 +4191,21 @@ def @os_condvar_select@(devices_scm, timeout_scm):
         @trampoline@(@r0@);
       }
 
-      var script = document.createElement('script');
-      script.type = 'text/javascript';
-      script.src = path;
-      script.onload = onload;
-      script.onerror = onerror;
-      document.head.append(script);
-
+      if (self.document === undefined) {
+        try {
+          self.importScripts(path);
+          onload();
+        } catch(e) {
+          onerror();
+        }
+      } else {
+        var script = document.createElement('script');
+        script.type = 'text/javascript';
+        script.src = path;
+        script.onload = onload;
+        script.onerror = onerror;
+        document.head.append(script);
+      }
       return 0; // ignored
     }
   } else {

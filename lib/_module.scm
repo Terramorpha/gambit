@@ -2,7 +2,7 @@
 
 ;;; File: "_module.scm"
 
-;;; Copyright (c) 1994-2021 by Marc Feeley, All Rights Reserved.
+;;; Copyright (c) 1994-2022 by Marc Feeley, All Rights Reserved.
 
 ;;;============================================================================
 
@@ -15,11 +15,16 @@
 (define-prim&proc (module-whitelist-reset!)
   (##set-module-whitelist! '()))
 
-(define-primitive (module-whitelist-add! source)
-  (##set-module-whitelist! (##cons source (##get-module-whitelist))))
-
-(define-procedure (module-whitelist-add! (source string))
-  (##module-whitelist-add! source))
+(define-prim&proc (module-whitelist-add! source)
+  (let ((modref (##parse-module-ref source #t)))
+    (if (and modref (macro-modref-host modref))
+        (let ((module-whitelist (##get-module-whitelist))
+              (modref-str (##modref->string modref)))
+          (if (##not (##member modref-str module-whitelist))
+              (##set-module-whitelist!
+               (##cons modref-str module-whitelist)))
+          (##void))
+        (error "hosted module reference expected but got" source))))
 
 (define-prim&proc (module-search-order-reset!)
   (##set-module-search-order! '()))
@@ -302,110 +307,119 @@
 
 ;;;----------------------------------------------------------------------------
 
-(define-prim (##search-module-aux modref check-mod search-order)
+(define (##search-module-with-exts mod-filename-noext mod-dir root path exts)
+  (let ((mod-path-noext (##path-expand mod-filename-noext mod-dir)))
 
-  (define (join parts dir)
-    (if (##pair? parts)
-        (##path-expand (##car parts)
-                       (join (##cdr parts) dir))
-        dir))
+    (define (try-opening-source-file path cont)
+      (and ##debug-modules?
+           (##debug-modules-trace 'try-opening-source-file path))
+      (##make-input-path-psettings
+       (##list 'path: path
+               'char-encoding: 'UTF-8
+               'eol-encoding: 'cr-lf)
+       (lambda ()
+         #f)
+       (lambda (psettings)
+         (let ((path (macro-psettings-path psettings)))
+           (##open-file-generic-from-psettings
+            psettings
+            #f ;; raise-os-exception?
+            cont
+            open-input-file
+            path
+            (macro-absent-obj))))))
 
-  (define (search-dir dir)
+    (define (check-source-with-ext ext)
+      (let ((mod-path (##string-append mod-path-noext (##car ext))))
+        (try-opening-source-file
+         mod-path
+         (lambda (port resolved-path)
+           (and (##not (##fixnum? port))
+                (##vector mod-dir
+                          mod-filename-noext
+                          ext
+                          mod-path
+                          port
+                          root
+                          path))))))
 
-    (define (search dirs nested-dirs root check-mod)
-      (and (##pair? dirs)
-           (let ()
+    (let loop ((exts exts))
+      (and (##pair? exts)
+           (or (check-source-with-ext (##car exts))
+               (loop (##cdr exts)))))))
 
-             (define (check dirs2)
-               (check-mod (##car dirs) (join dirs2 root) root dirs2))
+(define (##search-module-at dirs nested-dirs root exts)
+  (and (##pair? dirs)
+       (let ()
 
-             (or (check nested-dirs)
-                 (and (##pair? nested-dirs)
-                      (check (##cdr nested-dirs)))))))
+         (define (check dirs2)
+           (##search-module-with-exts
+            (##car dirs)
+            (##path-join-reversed dirs2 root)
+            root
+            dirs2
+            exts))
 
-    (let* ((host
-            (macro-modref-host modref))
-           (tag
-            (macro-modref-tag modref))
-           (rpath
-            (macro-modref-rpath modref)))
-      (if (or host tag)
+         (or (check nested-dirs)
+             (and (##pair? nested-dirs)
+                  (check (##cdr nested-dirs)))))))
 
-          (search rpath
-                  (##butlast rpath)
-                  (join (##list (##string-append "@" (or tag "")))
-                        (##path-expand (##last rpath)
-                                       (if host
-                                           (join host dir)
-                                           dir)))
-                  check-mod)
+(define (##search-module-in-dir modref dir)
+  (let* ((host
+          (macro-modref-host modref))
+         (tag
+          (macro-modref-tag modref))
+         (rpath
+          (macro-modref-rpath modref)))
+    (if (or host tag)
 
-          (let ((main-repo-path
-                 (##path-expand "@" (##path-expand (##last rpath) dir))))
-            (if (##file-exists? main-repo-path)
+        (##search-module-at
+         rpath
+         (##butlast rpath)
+         (##path-join-reversed
+          (##list (##string-append "@" (or tag "")))
+          (##path-expand (##last rpath)
+                         (if host
+                             (##path-join-reversed host dir)
+                             dir)))
+         ##scheme-file-extensions)
 
-                (search rpath
-                        (##butlast rpath)
-                        main-repo-path
-                        check-mod)
+        (let ((main-repo-path
+               (##path-expand "@" (##path-expand (##last rpath) dir))))
+          (if (##file-exists? main-repo-path)
 
-                (search rpath
-                        rpath
-                        dir
-                        check-mod))))))
+              (##search-module-at
+               rpath
+               (##butlast rpath)
+               main-repo-path
+               ##scheme-file-extensions)
 
+              (##search-module-at
+               rpath
+               rpath
+               dir
+               ##scheme-file-extensions))))))
+
+(define (##default-search-module-in-search-order modref search-order)
   (let loop ((lst search-order))
     (and (##pair? lst)
-         (let ((search-in (##car lst)))
-           (or (search-dir (##path-expand-in-initial-current-directory search-in))
+         (let ((dir (##car lst)))
+           (or (##search-module-in-dir
+                modref
+                (##path-expand-in-initial-current-directory dir))
                (loop (##cdr lst)))))))
+
+(define ##search-module-in-search-order
+  ##default-search-module-in-search-order)
+
+(define-prim (##search-module-in-search-order-set! x)
+  (set! ##search-module-in-search-order x))
 
 (define-prim (##search-module
               modref
               #!optional
               (search-order (##get-module-search-order)))
-
-  (define (try-opening-source-file path cont)
-    (if ##debug-modules? (pp (list 'try-opening-source-file path)));;;;;;;;;;;;;;
-    (##make-input-path-psettings
-     (##list 'path: path
-             'char-encoding: 'UTF-8
-             'eol-encoding: 'cr-lf)
-     (lambda ()
-       #f)
-     (lambda (psettings)
-       (let ((path (macro-psettings-path psettings)))
-         (##open-file-generic-from-psettings
-          psettings
-          #f ;; raise-os-exception?
-          cont
-          open-input-file
-          path
-          (macro-absent-obj))))))
-
-  (define (check-mod mod-filename-noext mod-dir root path)
-    (let ((mod-path-noext (##path-expand mod-filename-noext mod-dir)))
-
-      (define (check-source-with-ext ext)
-        (let ((mod-path (##string-append mod-path-noext (##car ext))))
-          (try-opening-source-file
-           mod-path
-           (lambda (port resolved-path)
-             (and (##not (##fixnum? port))
-                  (##vector mod-dir
-                            mod-filename-noext
-                            ext
-                            mod-path
-                            port
-                            root
-                            path))))))
-
-      (let loop ((exts ##scheme-file-extensions))
-        (and (##pair? exts)
-             (or (check-source-with-ext (##car exts))
-                 (loop (##cdr exts)))))))
-
-  (##search-module-aux modref check-mod search-order))
+  (##search-module-in-search-order modref search-order))
 
 (define-prim (##module-build-subdir-path mod-dir mod-filename-noext target)
   (##path-expand (##module-build-subdir-name mod-filename-noext target)
@@ -454,7 +468,9 @@
                (##string-append path-noext
                                 ".o"
                                 (##number->string version 10))))
-             (_ (if ##debug-modules? (pp (list '##file-info-aux resolved-path))));;;;;;;;;;;;;
+             (_
+              (and ##debug-modules?
+                   (##debug-modules-trace 'path-exists? resolved-path)))
              (resolved-info
               (##file-info-aux resolved-path))
              (resolved-path-exists?
@@ -552,7 +568,9 @@
               (##vector-ref path-and-info 0))
              (linker-name
               (##path-strip-directory path))
-             (_ (if ##debug-modules? (pp (list '##os-load-object-file path linker-name))));;;;;;;;;;;;;
+             (_
+              (and ##debug-modules?
+                   (##debug-modules-trace '##os-load-object-file path linker-name)))
              (result
               (##os-load-object-file path linker-name)))
 
@@ -667,23 +685,23 @@
 (define-prim (##build-module-subprocess-default-options-set! default-options)
   (set! ##build-module-subprocess-default-options default-options))
 
-(define-prim (##install-module modref)
-
-  (define (module-prefix=? str prefix)
-    (let ((str-len (##string-length str))
-          (prefix-len (##string-length prefix)))
+(define-prim (##module-prefix=? str prefix)
+  (let ((str-len (##string-length str))
+        (prefix-len (##string-length prefix)))
     (and
-      (##fx<= prefix-len str-len)
-      (let loop ((i 0))
-        (if (##fx< i prefix-len)
-          (let ((c1 (##string-ref prefix i))
-                (c2 (##string-ref str i)))
-            (and
+     (##fx<= prefix-len str-len)
+     (let loop ((i 0))
+       (if (##fx< i prefix-len)
+           (let ((c1 (##string-ref prefix i))
+                 (c2 (##string-ref str i)))
+             (and
               (##char=? c1 c2)
               (loop (##fx+ i 1))))
-          (if (##fx= i str-len)
-            #t
-            (##char=? ##module-path-sep (##string-ref str i))))))))
+           (if (##fx= i str-len)
+               #t
+               (##char=? ##module-path-sep (##string-ref str i))))))))
+
+(define-prim (##install-module modref)
 
   (define (repl-confirm? question)
     (##member (##repl-channel-confirm question) '("y" "yes")))
@@ -703,16 +721,18 @@
              modstr
              " is required but is not installed.\nDownload and install (y/n)? ")))))
 
-  (and (pair? (macro-modref-host modref)) ;; only install hosted modules
+  (and (##not (##fx= (##get-module-install-mode)
+                     (macro-module-install-mode-ask-never)))
+       (##pair? (macro-modref-host modref)) ;; only install hosted modules
        (begin
-         (if ##debug-modules? (pp (list '##install-module modref)));;;;;;;;;;;;;;;;;
+         (and ##debug-modules?
+              (##debug-modules-trace '##install-module modref))
          (let ((mod-string (##modref->string modref)))
 
            (and (or (##member
                      mod-string
                      (##get-module-whitelist)
-                     (lambda (a b)
-                       (module-prefix=? a b)))
+                     ##module-prefix=?)
                     ;; Ask user to install.
                     (module-install-confirm? mod-string))
 
@@ -765,6 +785,23 @@
             #f   ;; linker-name
             #f)) ;; quiet?
 
+  (define (handle-script-callback mod mod-info)
+    (let* ((module-descr
+            (macro-module-module-descr mod))
+           (meta-info
+            (macro-module-descr-meta-info module-descr))
+           (x
+            (##assq 'script-line meta-info)))
+      (if x
+          (let ((y (##cdr x)))
+            (script-callback (if (##pair? y) (##car y) y)
+                             (and mod-info
+                                  (##vector-ref mod-info 3)))))))
+
+  (define (load-module-handling-script-callback mod mod-info)
+    (handle-script-callback mod mod-info)
+    (##load-module (macro-module-module-ref mod)))
+
   (let ((modref (##parse-module-ref module-or-file)))
     (if (##not modref)
 
@@ -777,7 +814,7 @@
           (if mod
 
               ;; module is in the registered module table, so load it
-              (##load-module (macro-module-module-ref mod))
+              (load-module-handling-script-callback mod #f)
 
               (let ((mod-info (##search-or-else-install-module modref)))
                 (if mod-info
@@ -785,26 +822,31 @@
                     ;; module was found somewhere in the module search order
                     ;; or in the initial current directory, so load it from
                     ;; the filesystem
-                    (let* ((mod
-                            (##get-module-from-file module-ref
-                                                    modref
-                                                    mod-info))
-                           (module-descr
-                            (macro-module-module-descr mod))
-                           (meta-info
-                            (macro-module-descr-meta-info module-descr))
-                           (x
-                            (##assq 'script-line meta-info)))
-                      (if x
-                          (let ((y (##cdr x)))
-                            (script-callback (if (##pair? y) (##car y) y)
-                                             (##vector-ref mod-info 3))))
-                      (##load-module (macro-module-module-ref mod)))
+                    (load-module-handling-script-callback
+                     (##get-module-from-file module-ref modref mod-info)
+                     mod-info)
 
                     ;; last resort is to load a file
                     (load-file))))))))
 
-(define ##debug-modules? #f)
+(define (##debug-modules-trace . info)
+  (##repl
+   (lambda (first port)
+     (##write-string "*** " port)
+     (##write info port)
+     (##newline port)
+     #t)))
+
+(define ##debug-modules?
+  (let* ((settings
+          (##set-debug-settings! 0 0))
+         (level
+          (##fxwraplogical-shift-right
+           (##fxand
+            settings
+            (macro-debug-settings-level-mask))
+           (macro-debug-settings-level-shift))))
+    (##fx>= level 4)))
 
 (define-prim (##debug-modules?-set! x)
   (set! ##debug-modules? x))
@@ -895,86 +937,86 @@
                srcs)))))
         module-aliases)))
 
+(define-prim (##make-pattern-module-alias in-modref out-modref)
+  (lambda (modref)
+    (let* ((in-host (macro-modref-host in-modref))
+           (in-tag (macro-modref-tag in-modref))
+           (in-rpath (macro-modref-rpath in-modref))
+           (out-host (macro-modref-host out-modref))
+           (out-tag (macro-modref-tag out-modref))
+           (out-rpath (macro-modref-rpath out-modref)))
+
+      (if (and (##not out-host) out-tag (##null? out-rpath)
+               (##not in-tag) (##pair? in-rpath)
+               (##equal? (macro-modref-host modref) in-host)
+               (##equal? (macro-modref-rpath modref) in-rpath))
+
+          (macro-make-modref
+           in-host
+           out-tag
+           in-rpath)
+
+          (and (##equal? (macro-modref-host modref) in-host)
+               (if in-tag
+                   (##equal? (macro-modref-tag modref) in-tag)
+                   #t)
+               (let loop ((spath (##reverse (macro-modref-rpath modref)))
+                          (ipath (##reverse in-rpath)))
+                 (if (##pair? ipath)
+                     (and (##pair? spath)
+                          (##string=? (##car spath) (##car ipath))
+                          (loop (##cdr spath) (##cdr ipath)))
+                     ;; spath prefix matches so append rest of spath to alias
+                     (let ((rpath (##append (##reverse spath) out-rpath)))
+                       (and (##pair? rpath)
+                            (macro-make-modref
+                             out-host
+                             (or out-tag (macro-modref-tag modref))
+                             rpath))))))))))
+
 (define (##apply-module-alias modref module-alias)
- (let* ((in (##car module-alias))
-        (in-host (macro-modref-host in))
-        (in-tag (macro-modref-tag in))
-        (in-rpath (macro-modref-rpath in))
-
-        (out (##cdr module-alias))
-        (out-host (macro-modref-host out))
-        (out-tag (macro-modref-tag out))
-        (out-rpath (macro-modref-rpath out)))
-
-   (if (and (##not out-host) out-tag (##null? out-rpath)
-            (##not in-tag) (##pair? in-rpath)
-            (##equal? (macro-modref-host modref) in-host)
-            (##equal? (macro-modref-rpath modref) in-rpath))
-       (macro-make-modref
-         in-host
-         out-tag
-         in-rpath)
-
-       (and (##equal? (macro-modref-host modref) in-host)
-            (if in-tag
-                (##equal? (macro-modref-tag modref) in-tag)
-                #t)
-            (let loop ((spath (##reverse (macro-modref-rpath modref)))
-                       (ipath (##reverse (macro-modref-rpath in))))
-              (if (##pair? ipath)
-                (and (##pair? spath)
-                     (##string=? (##car spath) (##car ipath))
-                     (loop (##cdr spath) (##cdr ipath)))               ;; prefix of spath matches so append rest of spath to alias
-                (let ((rpath (##append
-                              (##reverse spath)
-                              (macro-modref-rpath out))))
-                  (and (##pair? rpath)
-                       (macro-make-modref
-                         out-host
-                         (or out-tag (macro-modref-tag modref))
-                         rpath)))))))))
+  (module-alias modref))
 
 ;;;----------------------------------------------------------------------------
 
-;;; validate and return the alias pair
-(define-prim ##validate-define-module-alias
-  (lambda (src)
-    (define (ill-formed-define-module-alias)
-      (##raise-expression-parsing-exception
-       'ill-formed-define-module-alias
-       src))
+;;; validate the define-module-alias and return the alias
 
-    (define (module-alias->modref alias allow-empty-path?)
-      (cond
-        ((or (##symbol? alias)
-             (##pair? alias))
-         (let ((modref (##parse-module-ref alias allow-empty-path?)))
-           (if (macro-modref? modref)
-               modref
-               (ill-formed-define-module-alias))))
-        (else
-          (ill-formed-define-module-alias))))
+(define-prim (##validate-define-module-alias src)
 
-    (##deconstruct-call
-      src
-      3
-      (lambda (name-src value-src)
-        (let* ((name (##desourcify name-src))
-               (value (##desourcify value-src))
-               (name-modref (module-alias->modref name #f))
-               (value-modref (module-alias->modref value #t)))
+  (define (ill-formed-define-module-alias)
+    (##raise-expression-parsing-exception
+     'ill-formed-define-module-alias
+     src))
 
-          ;;; TODO: make and abstraction to alias
-          (##cons name-modref value-modref))))))
+  (define (module-alias->modref alias allow-empty-path?)
+    (cond
+      ((or (##symbol? alias)
+           (##pair? alias))
+       (let ((modref (##parse-module-ref alias allow-empty-path?)))
+         (if (macro-modref? modref)
+             modref
+             (ill-formed-define-module-alias))))
+      (else
+        (ill-formed-define-module-alias))))
 
-(define-prim ##parse-define-module-alias
-  (lambda (src)
-    (##compilation-module-aliases-add!
-     (##validate-define-module-alias src))
+  (##deconstruct-call
+    src
+    3
+    (lambda (in-src out-src)
+      (let* ((in (##desourcify in-src))
+             (out (##desourcify out-src))
+             (in-modref (module-alias->modref in #f))
+             (out-modref (module-alias->modref out #t)))
+        (##make-pattern-module-alias in-modref out-modref)))))
 
-    (##expand-source-template
-     src
-     `(##begin))))
+(define-prim (##parse-define-module-alias src)
+
+  (##compilation-module-aliases-add!
+   (##validate-define-module-alias src))
+
+  (##expand-source-template
+   src
+   `(##begin)))
 
 (define-runtime-syntax ##define-module-alias
   ##parse-define-module-alias)

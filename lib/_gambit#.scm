@@ -1548,11 +1548,13 @@
 ;;;----------------------------------------------------------------------------
 
 (##include "_kernel#.scm")
+(##include "_fifo#.scm")
 (##include "_thread#.scm")
 (##include "_system#.scm")
 (##include "_num#.scm")
 (##include "_io#.scm")
 (##include "_eval#.scm")
+(##include "_module#.scm")
 (##include "_repl#.scm")
 (##include "_std#.scm")
 (##include "_nonstd#.scm")

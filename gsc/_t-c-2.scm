@@ -2,7 +2,7 @@
 
 ;;; File: "_t-c-2.scm"
 
-;;; Copyright (c) 1994-2021 by Marc Feeley, All Rights Reserved.
+;;; Copyright (c) 1994-2022 by Marc Feeley, All Rights Reserved.
 
 (include "fixnum.scm")
 
@@ -214,8 +214,7 @@
              (list "CFUN_OOL" c-name)))))
 
     (targ-emit
-      (list "JUMPPRM"
-            '("NOTHING")
+      (list "JUMPRET"
             (targ-opnd return-addr-reg)))
 
 ;;    (targ-repr-exit-block! #f)
@@ -231,8 +230,7 @@
 ;;    (targ-repr-exit-block! #f)
 
     (targ-emit
-      (list "JUMPPRM"
-            '("NOTHING")
+      (list "JUMPRET"
             (targ-opnd (make-stk fs))))
 
 ;;    (targ-repr-end-block!)
@@ -1356,13 +1354,14 @@
               (else
 ;;               (targ-repr-exit-block! #f)
                (targ-emit
-                 (list (if nb-args
-                         (begin
-                           (targ-wr-reg (+ (targ-nb-arg-regs) 1))
-                           (if safe? "JUMPGENSAFE" "JUMPGENNOTSAFE"))
-                         "JUMPPRM")
-                       (if nb-args set-nargs '("NOTHING"))
-                       (targ-opnd opnd)))))
+                (if nb-args
+                    (begin
+                      (targ-wr-reg (+ (targ-nb-arg-regs) 1))
+                      (list (if safe? "JUMPGENSAFE" "JUMPGENNOTSAFE")
+                            set-nargs
+                            (targ-opnd opnd)))
+                    (list "JUMPRET"
+                          (targ-opnd opnd))))))
 
 ;;        (targ-repr-end-block!)
 ))))
@@ -2848,6 +2847,21 @@
 
 ;;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
+(define (targ-apply-cpu-cycle-count start?)
+  (lambda (prim)
+    (proc-obj-inlinable?-set! prim (lambda (env) #t))
+    (proc-obj-inline-set!
+      prim
+      (lambda (opnds loc sn)
+        (targ-emit (list (if start?
+                             "CPUCYCLECOUNTSTART"
+                             "CPUCYCLECOUNTEND")))
+        (if loc
+            (targ-emit
+             (targ-loc loc '("GET_CPUCYCLECOUNT"))))))))
+
+;;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
 (define (targ-ifjump-simp-s flo? name)
   (targ-ifjump-simp #t flo? name))
 
@@ -3870,6 +3884,9 @@
 (targ-op "##primitive-lock!"    (targ-apply-simp-u #f #t 0 "PRIMITIVELOCK"))
 (targ-op "##primitive-trylock!" (targ-ifjump-simp-u #f "PRIMITIVETRYLOCK"))
 (targ-op "##primitive-unlock!"  (targ-apply-simp-u #f #t 0 "PRIMITIVEUNLOCK"))
+
+(targ-op "##cpu-cycle-count-start" (targ-apply-cpu-cycle-count #t))
+(targ-op "##cpu-cycle-count-end"   (targ-apply-cpu-cycle-count #f))
 
 (targ-op "##object-before?"   (targ-ifjump-simp-s #f "OBJECTBEFOREP"))
 

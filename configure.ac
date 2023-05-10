@@ -1,6 +1,6 @@
 # Configure template for Gambit system.
 
-# Copyright (c) 1994-2021 by Marc Feeley, All Rights Reserved.
+# Copyright (c) 1994-2022 by Marc Feeley, All Rights Reserved.
 
 # Process this file with autoconf to produce a configure script.
 
@@ -278,6 +278,10 @@ AC_ARG_ENABLE(c-opt,
               ENABLE_C_OPT=$enableval,
               ENABLE_C_OPT=no)
 
+if test "$ENABLE_C_OPT" != no; then
+  BOOTSTRAP_CONFIGURE_FLAGS="$BOOTSTRAP_CONFIGURE_FLAGS --enable-c-opt=$ENABLE_C_OPT"
+fi
+
 ###############################################################################
 #
 # Check if a specific C optimization level should be used for the RTS.  An
@@ -289,6 +293,10 @@ AC_ARG_ENABLE(c-opt-rts,
                              [use specified C optimization level for the RTS (default is the highest supported by the compiler)]),
               ENABLE_C_OPT_RTS=$enableval,
               ENABLE_C_OPT_RTS=yes)
+
+if test "$ENABLE_C_OPT_RTS" != yes; then
+  BOOTSTRAP_CONFIGURE_FLAGS="$BOOTSTRAP_CONFIGURE_FLAGS --enable-c-opt-rts=$ENABLE_C_OPT_RTS"
+fi
 
 ###############################################################################
 #
@@ -2305,26 +2313,41 @@ if test "$C_COMP_GNUC" = yes; then
 
     # clang does not support these options:
     DASH_fschedule_insns2=""
-    DASH_fno_move_loop_invariants=""
     DASH_fno_keep_inline_dllexport=""
     #DASH_fpermissive=""
+
+    DASH_fexpensive_optimizations=""
+    DASH_fipa_ra=""
+    DASH_fno_ipa_ra=""
+    DASH_fmove_loop_invariants=""
+    DASH_fno_move_loop_invariants=""
+    DASH_fgcse=""
+    DASH_fno_gcse=""
+
     DASH_mieee=""
     DASH_mieee_with_inexact=""
     DASH_mpc64=""
-    DASH_fno_ipa_ra=""
 
   else
 
     # optimization options:
     AC_CHECK_C_COMPILER_OPT(-fschedule-insns2,DASH_fschedule_insns2)
-    AC_CHECK_C_COMPILER_OPT(-fno-move-loop-invariants,DASH_fno_move_loop_invariants)
     AC_CHECK_C_COMPILER_OPT(-fno-keep-inline-dllexport,DASH_fno_keep_inline_dllexport)
     #AC_CHECK_C_COMPILER_OPT(-fpermissive,DASH_fpermissive)
+
+    AC_CHECK_C_COMPILER_OPT(-fexpensive-optimizations,DASH_fexpensive_optimizations)
+    AC_CHECK_C_COMPILER_OPT(-fipa-ra,DASH_fipa_ra)
+    AC_CHECK_C_COMPILER_OPT(-fno-ipa-ra,DASH_fno_ipa_ra)
+    AC_CHECK_C_COMPILER_OPT(-fmove-loop-invariants,DASH_fmove_loop_invariants)
+    AC_CHECK_C_COMPILER_OPT(-fno-move-loop-invariants,DASH_fno_move_loop_invariants)
+    AC_CHECK_C_COMPILER_OPT(-fgcse,DASH_fgcse)
+    AC_CHECK_C_COMPILER_OPT(-fno-gcse,DASH_fno_gcse)
 
     # machine specific options:
     AC_CHECK_C_COMPILER_OPT(-mieee,DASH_mieee)
     AC_CHECK_C_COMPILER_OPT(-mieee-with-inexact,DASH_mieee_with_inexact)
     AC_CHECK_C_COMPILER_OPT(-mpc64,DASH_mpc64)
+
   fi
 
   # preprocessor options:
@@ -2356,8 +2379,6 @@ if test "$C_COMP_GNUC" = yes; then
   AC_CHECK_C_COMPILER_OPT(-fwrapv,DASH_fwrapv)
   AC_CHECK_C_COMPILER_OPT(-ftrapv,DASH_ftrapv)
   AC_CHECK_C_COMPILER_OPT(-fomit-frame-pointer,DASH_fomit_frame_pointer)
-  AC_CHECK_C_COMPILER_OPT(-fno-ipa-ra, DASH_fno_ipa_ra)
-  AC_CHECK_C_COMPILER_OPT(-foptimize-sibling-calls,DASH_foptimize_sibling_calls)
 
   # machine architecture option:
   if test "$ENABLE_MARCH" != "" -a "$ENABLE_MARCH" != "no_enable_march"; then
@@ -2377,6 +2398,9 @@ if test "$C_COMP_GNUC" = yes; then
   fi
 
   FLAGS_OPT="$FLAGS_OPT_LO"
+  FLAGS_OPT="$FLAGS_OPT$DASH_fexpensive_optimizations"
+  FLAGS_OPT="$FLAGS_OPT$DASH_fno_gcse"
+
   FLAGS_OPT_RTS="$FLAGS_OPT_HI"
 
   case "$ENABLE_C_OPT" in
@@ -2485,9 +2509,17 @@ if test "$C_COMP_GNUC" = yes; then
   fi
 
   if test "$ENABLE_DEBUG" = yes; then
-    FLAGS_OPT=""
-    FLAGS_OPT_RTS=""
+
+    if test "$ENABLE_C_OPT" = no; then
+      FLAGS_OPT=""
+    fi
+
+    if test "$ENABLE_C_OPT_RTS" = yes; then
+      FLAGS_OPT_RTS=""
+    fi
+
     FLAGS_OBJ_DYN="$FLAGS_OBJ_DYN$DASH_g$DASH_ftrapv"
+
   else
     # TODO: remove the use of -fwrapv once runtime system is cleaned up
     FLAGS_OBJ_DYN="$FLAGS_OBJ_DYN$DASH_fwrapv"
@@ -2501,7 +2533,6 @@ if test "$C_COMP_GNUC" = yes; then
   FLAGS_OBJ_DYN="$FLAGS_OBJ_DYN$DASH_fno_math_errno"
   FLAGS_OBJ_DYN="$FLAGS_OBJ_DYN$DASH_fschedule_insns2"
   FLAGS_OBJ_DYN="$FLAGS_OBJ_DYN$DASH_fno_keep_inline_dllexport"
-  FLAGS_OBJ_DYN="$FLAGS_OBJ_DYN$DASH_foptimize_sibling_calls"
 
 #  if test "$ENABLE_CPLUSPLUS" = yes; then
 #    FLAGS_OBJ_DYN="$FLAGS_OBJ_DYN$DASH_fpermissive"
@@ -2532,10 +2563,14 @@ if test "$C_COMP_GNUC" = yes; then
 
   if test "$GNU_GCC_IPA_RA_POSSIBLE_BUG" = yes; then
     FLAGS_OBJ_DYN="$FLAGS_OBJ_DYN$DASH_fno_ipa_ra"
+  else
+    FLAGS_OBJ_DYN="$FLAGS_OBJ_DYN$DASH_fipa_ra"
   fi
 
   if test "$GNU_GCC_MOVE_LOOP_INVARIANTS_POSSIBLE_BUG" = yes; then
     FLAGS_OBJ_DYN="$FLAGS_OBJ_DYN$DASH_fno_move_loop_invariants"
+  else
+    FLAGS_OBJ_DYN="$FLAGS_OBJ_DYN$DASH_fmove_loop_invariants"
   fi
 
   FLAGS_OBJ_DYN="$FLAGS_OBJ_DYN$DASH_march"
@@ -2602,6 +2637,17 @@ else if test "$C_COMP_VISUALC" = yes; then
       no) ;;
 
        *) FLAGS_OPT=" $ENABLE_C_OPT"
+          ;;
+
+  esac
+  case "$ENABLE_C_OPT_RTS" in
+
+     yes) ;;
+
+      no) FLAGS_OPT_RTS="$FLAGS_OPT_LO"
+          ;;
+
+       *) FLAGS_OPT_RTS=" $ENABLE_C_OPT_RTS"
           ;;
 
   esac
@@ -2844,22 +2890,59 @@ else
 fi
 fi
 
+FLAGS_OBJ="$FLAGS_OBJ $FLAGS_OBJ_DYN $FLAGS_OBJ_DYN_LIB_EXE"
+FLAGS_DYN="$FLAGS_DYN $FLAGS_OBJ_DYN $FLAGS_OBJ_DYN_LIB_EXE $FLAGS_DYN_LIB"
+FLAGS_LIB="$FLAGS_LIB $FLAGS_OBJ_DYN_LIB_EXE $FLAGS_DYN_LIB"
+#FLAGS_EXE="$FLAGS_EXE $FLAGS_OBJ_DYN_LIB_EXE"
+FLAGS_EXE="$FLAGS_OBJ $FLAGS_EXE"
+
+DEFS_OBJ="$DEFS_OBJ_DYN_LIB_EXE $DEFS_OBJ"
+DEFS_DYN="$DEFS_OBJ_DYN_LIB_EXE $DEFS_DYN"
+DEFS_LIB="$DEFS_OBJ_DYN_LIB_EXE $DEFS_LIB"
+DEFS_EXE="$DEFS_OBJ_DYN_LIB_EXE $DEFS_EXE"
+
+###############################################################################
+#
+# Determine if the current binding of CFLAGS, CXXFLAGS and LDFLAGS
+# must be captured in the gambuild-C script (this is the default
+# behavior).
+
 if test "$ENABLE_CPLUSPLUS" = yes; then
   CORCXXFLAGS="$CXXFLAGS"
 else
   CORCXXFLAGS="$CFLAGS"
 fi
 
-FLAGS_OBJ="$CORCXXFLAGS $FLAGS_OBJ $FLAGS_OBJ_DYN $FLAGS_OBJ_DYN_LIB_EXE"
-FLAGS_DYN="$LDFLAGS $CORCXXFLAGS $FLAGS_DYN $FLAGS_OBJ_DYN $FLAGS_OBJ_DYN_LIB_EXE $FLAGS_DYN_LIB"
-FLAGS_LIB="$LDFLAGS $CORCXXFLAGS $FLAGS_LIB $FLAGS_OBJ_DYN_LIB_EXE $FLAGS_DYN_LIB"
-#FLAGS_EXE="$LDFLAGS $CORCXXFLAGS $FLAGS_EXE $FLAGS_OBJ_DYN_LIB_EXE"
+CORCXXFLAGS_GAMBUILD="$CORCXXFLAGS"
+LDFLAGS_GAMBUILD="$LDFLAGS"
+
+AC_ARG_ENABLE(corcxxflags-gambuild,
+              AS_HELP_STRING([--enable-corcxxflags-gambuild=FLAGS],
+                             [C compiler flags gambuild-C script will use instead of current CFLAGS/CXXFLAGS]),
+              CORCXXFLAGS_GAMBUILD="$enableval")
+
+AC_ARG_ENABLE(ldflags-gambuild,
+              AS_HELP_STRING([--enable-ldflags-gambuild=FLAGS],
+                             [C linker flags gambuild-C script will use instead of current LDFLAGS]),
+              LDFLAGS_GAMBUILD="$enableval")
+
+FLAGS_OBJ_GAMBUILD="\${{CORCXXFLAGS_GAMBUILD}} $FLAGS_OBJ"
+FLAGS_DYN_GAMBUILD="\${{LDFLAGS_GAMBUILD}} \${{CORCXXFLAGS_GAMBUILD}} $FLAGS_DYN"
+FLAGS_LIB_GAMBUILD="\${{LDFLAGS_GAMBUILD}} \${{CORCXXFLAGS_GAMBUILD}} $FLAGS_LIB"
+FLAGS_EXE_GAMBUILD="\${{LDFLAGS_GAMBUILD}} $FLAGS_OBJ_GAMBUILD $FLAGS_EXE"
+
+FLAGS_OBJ="$CORCXXFLAGS $FLAGS_OBJ"
+FLAGS_DYN="$LDFLAGS $CORCXXFLAGS $FLAGS_DYN"
+FLAGS_LIB="$LDFLAGS $CORCXXFLAGS $FLAGS_LIB"
 FLAGS_EXE="$LDFLAGS $FLAGS_OBJ $FLAGS_EXE"
 
-DEFS_OBJ="$DEFS_OBJ_DYN_LIB_EXE $DEFS_OBJ"
-DEFS_DYN="$DEFS_OBJ_DYN_LIB_EXE $DEFS_DYN"
-DEFS_LIB="$DEFS_OBJ_DYN_LIB_EXE $DEFS_LIB"
-DEFS_EXE="$DEFS_OBJ_DYN_LIB_EXE $DEFS_EXE"
+FLAGS_OPT_GAMBUILD="$FLAGS_OPT"
+FLAGS_OPT_RTS_GAMBUILD="$FLAGS_OPT_RTS"
+
+DEFS_OBJ_GAMBUILD="$DEFS_OBJ"
+DEFS_DYN_GAMBUILD="$DEFS_DYN"
+DEFS_LIB_GAMBUILD="$DEFS_LIB"
+DEFS_EXE_GAMBUILD="$DEFS_EXE"
 
 AC_SUBST(FLAGS_OBJ)
 AC_SUBST(FLAGS_DYN)
@@ -2871,6 +2954,18 @@ AC_SUBST(DEFS_OBJ)
 AC_SUBST(DEFS_DYN)
 AC_SUBST(DEFS_LIB)
 AC_SUBST(DEFS_EXE)
+AC_SUBST(CORCXXFLAGS_GAMBUILD)
+AC_SUBST(LDFLAGS_GAMBUILD)
+AC_SUBST(FLAGS_OBJ_GAMBUILD)
+AC_SUBST(FLAGS_DYN_GAMBUILD)
+AC_SUBST(FLAGS_LIB_GAMBUILD)
+AC_SUBST(FLAGS_EXE_GAMBUILD)
+AC_SUBST(FLAGS_OPT_GAMBUILD)
+AC_SUBST(FLAGS_OPT_RTS_GAMBUILD)
+AC_SUBST(DEFS_OBJ_GAMBUILD)
+AC_SUBST(DEFS_DYN_GAMBUILD)
+AC_SUBST(DEFS_LIB_GAMBUILD)
+AC_SUBST(DEFS_EXE_GAMBUILD)
 
 AC_SUBST(FLAGS_OBJ_MF)
 AC_SUBST(FLAGS_DYN_MF)
@@ -2882,6 +2977,18 @@ AC_SUBST(DEFS_OBJ_MF)
 AC_SUBST(DEFS_DYN_MF)
 AC_SUBST(DEFS_LIB_MF)
 AC_SUBST(DEFS_EXE_MF)
+AC_SUBST(CORCXXFLAGS_GAMBUILD_MF)
+AC_SUBST(LDFLAGS_GAMBUILD_MF)
+AC_SUBST(FLAGS_OBJ_GAMBUILD_MF)
+AC_SUBST(FLAGS_DYN_GAMBUILD_MF)
+AC_SUBST(FLAGS_LIB_GAMBUILD_MF)
+AC_SUBST(FLAGS_EXE_GAMBUILD_MF)
+AC_SUBST(FLAGS_OPT_GAMBUILD_MF)
+AC_SUBST(FLAGS_OPT_RTS_GAMBUILD_MF)
+AC_SUBST(DEFS_OBJ_GAMBUILD_MF)
+AC_SUBST(DEFS_DYN_GAMBUILD_MF)
+AC_SUBST(DEFS_LIB_GAMBUILD_MF)
+AC_SUBST(DEFS_EXE_GAMBUILD_MF)
 
 AC_SUBST(FLAGS_OBJ_SH)
 AC_SUBST(FLAGS_DYN_SH)
@@ -2893,6 +3000,18 @@ AC_SUBST(DEFS_OBJ_SH)
 AC_SUBST(DEFS_DYN_SH)
 AC_SUBST(DEFS_LIB_SH)
 AC_SUBST(DEFS_EXE_SH)
+AC_SUBST(CORCXXFLAGS_GAMBUILD_SH)
+AC_SUBST(LDFLAGS_GAMBUILD_SH)
+AC_SUBST(FLAGS_OBJ_GAMBUILD_SH)
+AC_SUBST(FLAGS_DYN_GAMBUILD_SH)
+AC_SUBST(FLAGS_LIB_GAMBUILD_SH)
+AC_SUBST(FLAGS_EXE_GAMBUILD_SH)
+AC_SUBST(FLAGS_OPT_GAMBUILD_SH)
+AC_SUBST(FLAGS_OPT_RTS_GAMBUILD_SH)
+AC_SUBST(DEFS_OBJ_GAMBUILD_SH)
+AC_SUBST(DEFS_DYN_GAMBUILD_SH)
+AC_SUBST(DEFS_LIB_GAMBUILD_SH)
+AC_SUBST(DEFS_EXE_GAMBUILD_SH)
 
 AC_SUBST(FLAGS_OBJ_BAT)
 AC_SUBST(FLAGS_DYN_BAT)
@@ -2904,6 +3023,18 @@ AC_SUBST(DEFS_OBJ_BAT)
 AC_SUBST(DEFS_DYN_BAT)
 AC_SUBST(DEFS_LIB_BAT)
 AC_SUBST(DEFS_EXE_BAT)
+AC_SUBST(CORCXXFLAGS_GAMBUILD_BAT)
+AC_SUBST(LDFLAGS_GAMBUILD_BAT)
+AC_SUBST(FLAGS_OBJ_GAMBUILD_BAT)
+AC_SUBST(FLAGS_DYN_GAMBUILD_BAT)
+AC_SUBST(FLAGS_LIB_GAMBUILD_BAT)
+AC_SUBST(FLAGS_EXE_GAMBUILD_BAT)
+AC_SUBST(FLAGS_OPT_GAMBUILD_BAT)
+AC_SUBST(FLAGS_OPT_RTS_GAMBUILD_BAT)
+AC_SUBST(DEFS_OBJ_GAMBUILD_BAT)
+AC_SUBST(DEFS_DYN_GAMBUILD_BAT)
+AC_SUBST(DEFS_LIB_GAMBUILD_BAT)
+AC_SUBST(DEFS_EXE_GAMBUILD_BAT)
 
 ###############################################################################
 
@@ -3091,6 +3222,12 @@ else
 
 fi
 
+BUILD_OBJ_RTS_GAMBUILD="$BUILD_OBJ_RTS"
+BUILD_OBJ_GAMBUILD="$BUILD_OBJ"
+BUILD_DYN_GAMBUILD="$BUILD_DYN"
+BUILD_LIB_GAMBUILD="$BUILD_LIB"
+BUILD_EXE_GAMBUILD="$BUILD_EXE"
+
 # The following code for making installed libraries may benefit from
 # a rewrite so that it reuses the "BUILD_XXX" command infrastructure.
 
@@ -3262,10 +3399,10 @@ GAMBITLIB_DEFS="$GAMBITLIB_DEFS -D___BAT_EXTENSION=\"\\\"$BAT_EXTENSION\\\"\""
 # Escape strings before substitution.
 
 ESC_MF="sed -e s/\\\\\\\$/\\\$\\\$/g"
-ESC_SH="sed -e s/\\\\/\\\\\\\\\\\\\\\\/g -e s/\\\"/\\\\\\\"/g -e s/\\\$/\\\\\\\$/g -e s/^/\"/ -e s/$/\"/"
+ESC_SH="sed -e s/\\\\/\\\\\\\\/g -e s/\\\"/\\\\\\\"/g -e s/\$(\([[^)]]*\))/\\\\\$(\1)/g -e s/\${\([[^{]][[^}]]*\)}/\\\\\${\1}/g -e s/\${{\([[^}]]*\)}}/\${\1}/g -e s/^/\"/ -e s/$/\"/"
 ESC_ECHO="sed -e s/\\\\/\\\\\\\\\\\\\\\\/g -e s/\\\"/\\\\\\\"/g -e s/^/\"/ -e s/$/\"/"
-ESC_BAT="sed -e s/\${/%%/g -e s/}/%%/g"
-ESC_ECHO_BAT="sed -e s/\${/%/g -e s/}/%/g"
+ESC_BAT="sed -e s/\$(\([[^)]]*\))/\$(\1)/g -e s/\${\([[^{]][[^}]]*\)}/%%\1%%/g -e s/\${{\([[^}]]*\)}}/%\1%/g"
+ESC_ECHO_BAT="sed -e s/\$(\([[^)]]*\))/\$(\1)/g -e s/\${\([[^{]][[^}]]*\)}/%%\1%%/g -e s/\${{\([[^}]]*\)}}/%\1%/g"
 
 C_COMPILER_MF=`echo "$C_COMPILER" | $ESC_MF`
 C_PREPROC_MF=`echo "$C_PREPROC" | $ESC_MF`
@@ -3289,6 +3426,28 @@ BUILD_OBJ_MF=`echo "$BUILD_OBJ" | $ESC_MF`
 BUILD_DYN_MF=`echo "$BUILD_DYN" | $ESC_MF`
 BUILD_LIB_MF=`echo "$BUILD_LIB" | $ESC_MF`
 BUILD_EXE_MF=`echo "$BUILD_EXE" | $ESC_MF`
+
+CORCXXFLAGS_GAMBUILD_MF=`echo "$CORCXXFLAGS_GAMBUILD" | $ESC_MF`
+LDFLAGS_GAMBUILD_MF=`echo "$LDFLAGS_GAMBUILD" | $ESC_MF`
+
+FLAGS_OBJ_GAMBUILD_MF=`echo "$FLAGS_OBJ_GAMBUILD" | $ESC_MF`
+FLAGS_DYN_GAMBUILD_MF=`echo "$FLAGS_DYN_GAMBUILD" | $ESC_MF`
+FLAGS_LIB_GAMBUILD_MF=`echo "$FLAGS_LIB_GAMBUILD" | $ESC_MF`
+FLAGS_EXE_GAMBUILD_MF=`echo "$FLAGS_EXE_GAMBUILD" | $ESC_MF`
+
+FLAGS_OPT_GAMBUILD_MF=`echo "$FLAGS_OPT_GAMBUILD" | $ESC_MF`
+FLAGS_OPT_RTS_GAMBUILD_MF=`echo "$FLAGS_OPT_RTS_GAMBUILD" | $ESC_MF`
+
+DEFS_OBJ_GAMBUILD_MF=`echo "$DEFS_OBJ_GAMBUILD" | $ESC_MF`
+DEFS_DYN_GAMBUILD_MF=`echo "$DEFS_DYN_GAMBUILD" | $ESC_MF`
+DEFS_LIB_GAMBUILD_MF=`echo "$DEFS_LIB_GAMBUILD" | $ESC_MF`
+DEFS_EXE_GAMBUILD_MF=`echo "$DEFS_EXE_GAMBUILD" | $ESC_MF`
+
+BUILD_OBJ_RTS_GAMBUILD_MF=`echo "$BUILD_OBJ_RTS_GAMBUILD" | $ESC_MF`
+BUILD_OBJ_GAMBUILD_MF=`echo "$BUILD_OBJ_GAMBUILD" | $ESC_MF`
+BUILD_DYN_GAMBUILD_MF=`echo "$BUILD_DYN_GAMBUILD" | $ESC_MF`
+BUILD_LIB_GAMBUILD_MF=`echo "$BUILD_LIB_GAMBUILD" | $ESC_MF`
+BUILD_EXE_GAMBUILD_MF=`echo "$BUILD_EXE_GAMBUILD" | $ESC_MF`
 
 DEFS_MF=`echo "$DEFS" | $ESC_MF`
 LIBS_MF=`echo "$LIBS" | $ESC_MF`
@@ -3327,6 +3486,28 @@ BUILD_DYN_SH=`echo "$BUILD_DYN" | $ESC_SH`
 BUILD_LIB_SH=`echo "$BUILD_LIB" | $ESC_SH`
 BUILD_EXE_SH=`echo "$BUILD_EXE" | $ESC_SH`
 
+CORCXXFLAGS_GAMBUILD_SH=`echo "$CORCXXFLAGS_GAMBUILD" | $ESC_SH`
+LDFLAGS_GAMBUILD_SH=`echo "$LDFLAGS_GAMBUILD" | $ESC_SH`
+
+FLAGS_OBJ_GAMBUILD_SH=`echo "$FLAGS_OBJ_GAMBUILD" | $ESC_SH`
+FLAGS_DYN_GAMBUILD_SH=`echo "$FLAGS_DYN_GAMBUILD" | $ESC_SH`
+FLAGS_LIB_GAMBUILD_SH=`echo "$FLAGS_LIB_GAMBUILD" | $ESC_SH`
+FLAGS_EXE_GAMBUILD_SH=`echo "$FLAGS_EXE_GAMBUILD" | $ESC_SH`
+
+FLAGS_OPT_GAMBUILD_SH=`echo "$FLAGS_OPT_GAMBUILD" | $ESC_SH`
+FLAGS_OPT_RTS_GAMBUILD_SH=`echo "$FLAGS_OPT_RTS_GAMBUILD" | $ESC_SH`
+
+DEFS_OBJ_GAMBUILD_SH=`echo "$DEFS_OBJ_GAMBUILD" | $ESC_SH`
+DEFS_DYN_GAMBUILD_SH=`echo "$DEFS_DYN_GAMBUILD" | $ESC_SH`
+DEFS_LIB_GAMBUILD_SH=`echo "$DEFS_LIB_GAMBUILD" | $ESC_SH`
+DEFS_EXE_GAMBUILD_SH=`echo "$DEFS_EXE_GAMBUILD" | $ESC_SH`
+
+BUILD_OBJ_RTS_GAMBUILD_SH=`echo "$BUILD_OBJ_RTS_GAMBUILD" | $ESC_SH`
+BUILD_OBJ_GAMBUILD_SH=`echo "$BUILD_OBJ_GAMBUILD" | $ESC_SH`
+BUILD_DYN_GAMBUILD_SH=`echo "$BUILD_DYN_GAMBUILD" | $ESC_SH`
+BUILD_LIB_GAMBUILD_SH=`echo "$BUILD_LIB_GAMBUILD" | $ESC_SH`
+BUILD_EXE_GAMBUILD_SH=`echo "$BUILD_EXE_GAMBUILD" | $ESC_SH`
+
 DEFS_SH=`echo "$DEFS" | $ESC_SH`
 LIBS_SH=`echo "$LIBS" | $ESC_SH`
 GAMBITLIB_DEFS_SH=`echo "$GAMBITLIB_DEFS" | $ESC_SH`
@@ -3363,6 +3544,28 @@ BUILD_OBJ_BAT=`echo "$BUILD_OBJ" | $ESC_BAT`
 BUILD_DYN_BAT=`echo "$BUILD_DYN" | $ESC_BAT`
 BUILD_LIB_BAT=`echo "$BUILD_LIB" | $ESC_BAT`
 BUILD_EXE_BAT=`echo "$BUILD_EXE" | $ESC_BAT`
+
+CORCXXFLAGS_GAMBUILD_BAT=`echo "$CORCXXFLAGS_GAMBUILD" | $ESC_BAT`
+LDFLAGS_GAMBUILD_BAT=`echo "$LDFLAGS_GAMBUILD" | $ESC_BAT`
+
+FLAGS_OBJ_GAMBUILD_BAT=`echo "$FLAGS_OBJ_GAMBUILD" | $ESC_BAT`
+FLAGS_DYN_GAMBUILD_BAT=`echo "$FLAGS_DYN_GAMBUILD" | $ESC_BAT`
+FLAGS_LIB_GAMBUILD_BAT=`echo "$FLAGS_LIB_GAMBUILD" | $ESC_BAT`
+FLAGS_EXE_GAMBUILD_BAT=`echo "$FLAGS_EXE_GAMBUILD" | $ESC_BAT`
+
+FLAGS_OPT_GAMBUILD_BAT=`echo "$FLAGS_OPT_GAMBUILD" | $ESC_BAT`
+FLAGS_OPT_RTS_GAMBUILD_BAT=`echo "$FLAGS_OPT_RTS_GAMBUILD" | $ESC_BAT`
+
+DEFS_OBJ_GAMBUILD_BAT=`echo "$DEFS_OBJ_GAMBUILD" | $ESC_BAT`
+DEFS_DYN_GAMBUILD_BAT=`echo "$DEFS_DYN_GAMBUILD" | $ESC_BAT`
+DEFS_LIB_GAMBUILD_BAT=`echo "$DEFS_LIB_GAMBUILD" | $ESC_BAT`
+DEFS_EXE_GAMBUILD_BAT=`echo "$DEFS_EXE_GAMBUILD" | $ESC_BAT`
+
+BUILD_OBJ_RTS_GAMBUILD_BAT=`echo "$BUILD_OBJ_RTS_GAMBUILD" | $ESC_BAT`
+BUILD_OBJ_GAMBUILD_BAT=`echo "$BUILD_OBJ_GAMBUILD" | $ESC_BAT`
+BUILD_DYN_GAMBUILD_BAT=`echo "$BUILD_DYN_GAMBUILD" | $ESC_BAT`
+BUILD_LIB_GAMBUILD_BAT=`echo "$BUILD_LIB_GAMBUILD" | $ESC_BAT`
+BUILD_EXE_GAMBUILD_BAT=`echo "$BUILD_EXE_GAMBUILD" | $ESC_BAT`
 
 DEFS_BAT=`echo "$DEFS" | $ESC_BAT`
 LIBS_BAT=`echo "$LIBS" | $ESC_BAT`
@@ -3415,6 +3618,13 @@ AC_SUBST(BUILD_OBJ)
 AC_SUBST(BUILD_DYN)
 AC_SUBST(BUILD_LIB)
 AC_SUBST(BUILD_EXE)
+
+AC_SUBST(BUILD_OBJ_RTS_GAMBUILD)
+AC_SUBST(BUILD_OBJ_GAMBUILD)
+AC_SUBST(BUILD_DYN_GAMBUILD)
+AC_SUBST(BUILD_LIB_GAMBUILD)
+AC_SUBST(BUILD_EXE_GAMBUILD)
+
 AC_SUBST(DEFS)
 AC_SUBST(LIBS)
 AC_SUBST(GAMBITLIB_DEFS)
@@ -3434,6 +3644,13 @@ AC_SUBST(BUILD_OBJ_MF)
 AC_SUBST(BUILD_DYN_MF)
 AC_SUBST(BUILD_LIB_MF)
 AC_SUBST(BUILD_EXE_MF)
+
+AC_SUBST(BUILD_OBJ_RTS_GAMBUILD_MF)
+AC_SUBST(BUILD_OBJ_GAMBUILD_MF)
+AC_SUBST(BUILD_DYN_GAMBUILD_MF)
+AC_SUBST(BUILD_LIB_GAMBUILD_MF)
+AC_SUBST(BUILD_EXE_GAMBUILD_MF)
+
 AC_SUBST(DEFS_MF)
 AC_SUBST(LIBS_MF)
 AC_SUBST(GAMBITLIB_DEFS_MF)
@@ -3453,6 +3670,13 @@ AC_SUBST(BUILD_OBJ_SH)
 AC_SUBST(BUILD_DYN_SH)
 AC_SUBST(BUILD_LIB_SH)
 AC_SUBST(BUILD_EXE_SH)
+
+AC_SUBST(BUILD_OBJ_RTS_GAMBUILD_SH)
+AC_SUBST(BUILD_OBJ_GAMBUILD_SH)
+AC_SUBST(BUILD_DYN_GAMBUILD_SH)
+AC_SUBST(BUILD_LIB_GAMBUILD_SH)
+AC_SUBST(BUILD_EXE_GAMBUILD_SH)
+
 AC_SUBST(DEFS_SH)
 AC_SUBST(LIBS_SH)
 AC_SUBST(GAMBITLIB_DEFS_SH)
@@ -3472,6 +3696,13 @@ AC_SUBST(BUILD_OBJ_BAT)
 AC_SUBST(BUILD_DYN_BAT)
 AC_SUBST(BUILD_LIB_BAT)
 AC_SUBST(BUILD_EXE_BAT)
+
+AC_SUBST(BUILD_OBJ_RTS_GAMBUILD_BAT)
+AC_SUBST(BUILD_OBJ_GAMBUILD_BAT)
+AC_SUBST(BUILD_DYN_GAMBUILD_BAT)
+AC_SUBST(BUILD_LIB_GAMBUILD_BAT)
+AC_SUBST(BUILD_EXE_GAMBUILD_BAT)
+
 AC_SUBST(DEFS_BAT)
 AC_SUBST(LIBS_BAT)
 AC_SUBST(GAMBITLIB_DEFS_BAT)
