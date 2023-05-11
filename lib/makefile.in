@@ -174,7 +174,7 @@ BUILD_OBJ_OUTPUT_FILENAME_PARAM = $*@obj@
 BUILD_OBJ_CC_OPTIONS_PARAM =  -I$(srcdir) $(DEFS) $(GAMBITLIB_DEFS) -D___PRIMAL
 BUILD_OBJ_INPUT_FILENAMES_PARAM = $(srcdirpfx)$*.c
 
-PRELUDE_OPT = -prelude "@RTLIB_COND_EXPAND_FEATURES@(\#\#include\"$(srcdirpfx)/header.scm\")"
+PRELUDE_OPT = -prelude "@RTLIB_COND_EXPAND_FEATURES@(\#\#include\"$(srcdirpfx)header.scm\")"
 
 all: core
 
