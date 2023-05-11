@@ -106,9 +106,19 @@ BUILD_HOST = localhost
 all: core
 	$(MAKE) modules  # comment this line during development to avoid building the modules on every change
 
+bundle:
+	cd lib;make
+	cp -r ./lib ./bundle
+	cp include/stamp.h ./bundle/
+	cp include/stamp.h ./bundle/stamp-release.h
+	cp include/gambit.h ./bundle/
+	cp include/config.h ./bundle/
+	rm ./bundle/makefile
+	cd bundle; mv client-makefile makefile
+
 core:
 
-core-pre: gsc-boot@exe@
+core-pre: gsc-boot@exe@ bundle
 	$(MAKE) stamp
 	@if echo "MAKEFLAGS: $(MAKEFLAGS)" | fgrep -e "--jobserver-fds="; then \
 	  $(MAKE) phases; \

@@ -4,7 +4,7 @@
 
 herefromroot = lib
 rootfromhere = ..
-SUBDIRS1 = _define-library
+SUBDIRS1 = # _define-library
 SUBDIRS2 = @RTLIBSUBSYS@ _base64 _digest _geiser _git _hamt _http _match _pkg _six _tar _test _uri _zlib gambit scheme termite srfi
 SUBDIRS = $(SUBDIRS1) $(SUBDIRS2)
 
@@ -188,20 +188,6 @@ core-post:
 .scm.c:
 	$(GSC_BOOT) -:~~bin=$(srcdirpfx)$(rootfromhere)/bin,~~lib=$(srcdirpfx)$(rootfromhere)/lib,~~include=$(srcdirpfx)$(rootfromhere)/include -f -c @COMPILATION_OPTIONS@ $(PRELUDE_OPT) $(srcdirpfx)$*.scm
 
-# utile pour le bundling
-modules-c : $(MODULES_C)
-
-libgambit-bundle: $(MODULES_C) $(STAMP_H)
-	$(eval TMP := $(shell mktemp -d))
-	cp -r ./ $(TMP)
-	cp $(STAMP_H) $(TMP)
-	cp $(STAMP_H) $(TMP)/stamp-release.h
-	cp $(GAMBIT_H) $(TMP)
-	cp $(CONFIG_H) $(TMP)
-	rm $(TMP)/makefile
-	cd $(TMP); mv client-makefile makefile
-
-
 phase1: $(MODULES_C_IN_COMPILE_ORDER) $(GAMBIT_LIB_C)
 
 phase2:
@@ -220,9 +206,9 @@ $(LIBRARY): $(LIBRARY_OBJECTS_IN_COMPILE_ORDER)
 
 univ-libs: $(UNIVLIB) $(MODULES_SCM)
 	@for target in $(BUILD_TARGETS); do \
-	  if test "$$target" != "C"; then \
-	    $(MAKE) GAMBIT_LIB_$$target; \
-	  fi; \
+		if test "$$target" != "C"; then \
+			$(MAKE) GAMBIT_LIB_$$target; \
+		fi; \
 	done
 
 GAMBIT_LIB_C: $(GAMBIT_LIB_C)
