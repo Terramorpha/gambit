@@ -36,6 +36,7 @@ Output mode
     -link       Generate a link file combining a set of compiled files
     -obj        Compile to object files (.o, .obj)
     -exe        Compile to an executable program or script
+    -bundle     Compile to an compilable bundle
     -dynamic    Compile to a .oN dynamically loadable file (default mode)
 
 Output options
@@ -294,19 +295,22 @@ usage-end
            (exe-opt?     (##assq 'exe options))
            (obj-opt?     (##assq 'obj options))
            (dynamic-opt? (##assq 'dynamic options))
-           (warnings-opt? (##assq 'warnings options)))
+           (warnings-opt? (##assq 'warnings options))
+           (bundle-opt?  (##assq 'bundle options)))
       (if (##fx< 1 (##fx+
                          (if c-opt? 1 0)
                          (if link-opt? 1 0)
                          (if exe-opt? 1 0)
                          (if obj-opt? 1 0)
-                         (if dynamic-opt? 1 0)))
+                         (if dynamic-opt? 1 0)
+                         (if bundle-opt? 1 0)))
           (warn-mutually-exclusive-options)
           (let ((type
                  (cond (c-opt?    'c)
                        (link-opt? 'link)
                        (exe-opt?  'exe)
                        (obj-opt?  'obj)
+                       (bundle-opt? 'bundle)
                        (else      'dyn))))
             (let loop1 ((lst arguments)
                         (nb-output-files 0))
@@ -845,7 +849,7 @@ usage-end
     (##repl
      (lambda (first output-port)
        (##write-string
-        "*** WARNING -- The -c, -link, -dynamic, -exe and -obj options are mutually exclusive\n"
+        "*** WARNING -- The -c, -link, -dynamic, -exe, -bundle and -obj options are mutually exclusive\n"
         output-port)
        #t)))
 
@@ -989,7 +993,7 @@ usage-end
                 (else
                  (let* ((common-compiler-options
                          '((target symbol)
-                           (c) (dynamic) (exe) (obj) (link) (flat)
+                           (c) (dynamic) (exe) (obj) (link) (bundle) (flat) 
                            (compactness fixnum)
                            (warnings) (verbose) (report)
                            (expansion) (gvm) (cfg) (dg) (asm) (keep-temp)
