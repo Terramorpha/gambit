@@ -678,7 +678,25 @@ usage-end
                                                             #f)))
                                                       (add-obj-file obj-file)
                                                       (add-tmp-file obj-file)
-                                                      (add-tmp-file gen-file))))))
+                                                      (add-tmp-file gen-file)))))
+                                             ((bundle)
+                                              (let ((tmpdir (create-temporary-directory "/tmp/bundle.")))
+                                                (do-compile-file-to-target
+                                                 file
+                                                 options
+                                                 (string-append tmpdir "/target.c"))
+                                                (link-flat (list (string-append tmpdir "/target")))
+                                                (newline)
+                                                (let ((cp-res (shell-command (string-append "cp -r " (path-expand "~~bundle") " " (string-append tmpdir "/libgambit")) #t)))
+                                                  (display tmpdir) (newline)
+                                                  (display cp-res) (newline)
+                                                  (with-output-to-file (string-append tmpdir "/makefile")
+                                                    (lambda ()
+                                                      (display
+                                                       (string-append
+                                                        "all:\n"
+                                                        "\t"))))
+                                                  (##exit 0)))))
                                            (loop2 rest))))))
 
                             (let* ((flat?

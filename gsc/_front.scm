@@ -122,7 +122,7 @@
                      ((track-scheme)
                       (set! compiler-option-track-scheme       #t)
                       #t)
-                     ((c dynamic exe obj link flat
+                     ((c dynamic exe obj link bundle flat
                          check force keep-temp
                          o l module-ref linker-name prelude postlude
                          cc cc-options ld-options-prelude ld-options
