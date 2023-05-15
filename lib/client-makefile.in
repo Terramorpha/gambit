@@ -179,9 +179,6 @@ core:
 
 core-pre: $(LIBRARY) $(GAMBIT_LIBS)
 
-core-post:
-	$(MAKE) deselect-gen-for-commit-post-nonrec
-
 phase1: $(MODULES_C_IN_COMPILE_ORDER) $(GAMBIT_LIB_C)
 
 phase2:
@@ -404,11 +401,6 @@ select-gen-for-commit-pre:
 select-gen-for-commit-post select-gen-for-commit-post-nonrec:
 	if [ -e $(rootfromhere)/.git ]; then $(RC) update-index --no-skip-worktree $(MODULES_C) $(GAMBIT_LIB_C); fi
 
-deselect-gen-for-commit-pre:
-
-deselect-gen-for-commit-post deselect-gen-for-commit-post-nonrec:
-	if [ -e $(rootfromhere)/.git ]; then $(RC) update-index --skip-worktree $(MODULES_C) $(GAMBIT_LIB_C); fi
-
 mostlyclean-pre:
 
 mostlyclean-post mostlyclean-post-nonrec:
@@ -536,18 +528,6 @@ uninstall: uninstall-post
 uninstall-post: uninstall-recursive
 
 uninstall-recursive: uninstall-pre
-
-select-gen-for-commit: select-gen-for-commit-post
-
-select-gen-for-commit-post: select-gen-for-commit-recursive
-
-select-gen-for-commit-post-nonrec select-gen-for-commit-recursive: select-gen-for-commit-pre
-
-deselect-gen-for-commit: deselect-gen-for-commit-post
-
-deselect-gen-for-commit-post: deselect-gen-for-commit-recursive
-
-deselect-gen-for-commit-post-nonrec deselect-gen-for-commit-recursive: deselect-gen-for-commit-pre
 
 mostlyclean: mostlyclean-post
 

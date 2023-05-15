@@ -106,12 +106,13 @@ BUILD_HOST = localhost
 all: core
 	$(MAKE) modules  # comment this line during development to avoid building the modules on every change
 
-bundle:
+bundle: lib
 	cd lib;make
 	cp -r ./lib ./bundle
 	cp include/stamp.h ./bundle/
 	cp include/stamp.h ./bundle/stamp-release.h
 	cp include/gambit.h ./bundle/
+	cp include/gambit-not409004.h ./bundle/
 	cp include/config.h ./bundle/
 	rm ./bundle/makefile
 	cd bundle; mv client-makefile makefile
