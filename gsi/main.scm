@@ -9,6 +9,13 @@
 (##define-macro (macro-initialization-file)
   ".gambini")
 
+(define (string-join ss sep)
+  (if (pair? ss)
+      (if (pair? (cdr ss))
+          (string-append (car ss) sep (string-join (cdr ss) sep))
+          (car ss))
+      ""))
+
 (define (##main-gsi/gsc)
 
   ;; In the usages "^" stands for the program name.
@@ -680,23 +687,12 @@ usage-end
                                                       (add-tmp-file obj-file)
                                                       (add-tmp-file gen-file)))))
                                              ((bundle)
-                                              (let ((tmpdir (create-temporary-directory "/tmp/bundle.")))
-                                                (do-compile-file-to-target
-                                                 file
-                                                 options
-                                                 (string-append tmpdir "/target.c"))
-                                                (link-flat (list (string-append tmpdir "/target")))
-                                                (newline)
-                                                (let ((cp-res (shell-command (string-append "cp -r " (path-expand "~~bundle") " " (string-append tmpdir "/libgambit")) #t)))
-                                                  (display tmpdir) (newline)
-                                                  (display cp-res) (newline)
-                                                  (with-output-to-file (string-append tmpdir "/makefile")
-                                                    (lambda ()
-                                                      (display
-                                                       (string-append
-                                                        "all:\n"
-                                                        "\t"))))
-                                                  (##exit 0)))))
+                                              (let ((gen-file
+                                                     (do-compile-file-to-target
+                                                      file
+                                                      options
+                                                      #f)))
+                                                (add-gen-file gen-file))))
                                            (loop2 rest))))))
 
                             (let* ((flat?
@@ -705,6 +701,8 @@ usage-end
                                     (##eq? type 'link))
                                    (exe?
                                     (##eq? type 'exe))
+                                   (bundle?
+                                    (##eq? type 'bundle))
                                    (base
                                     (let ((x (##assq 'l options)))
                                       (cond ((##not x)
@@ -716,7 +714,7 @@ usage-end
                                             (else
                                              (##cadr x))))))
 
-                              (if (or link? exe?)
+                              (if (or link? bundle? exe?)
 
                                   (let ((gen-files
                                          (##reverse rev-gen-files)))
@@ -771,6 +769,25 @@ usage-end
                                                        (add-tmp-file obj-link-file)
                                                        (add-tmp-file link-file)))))))
 
+
+                                    (if bundle?
+                                        (let* ((tmp (create-temporary-directory "/tmp/bundle."))
+                                               (c-files (map car rev-gen-files))
+                                               (command-output (shell-command (string-append "cp -r " (path-expand "~~bundle") " " tmp "/lib"))))
+                                          (display rev-gen-files) (newline)
+                                          (display command-output) (newline)
+
+                                          (for-each
+                                           (lambda (file)
+                                             (copy-file file (string-append tmp "/" (path-strip-directory file))))
+                                           c-files)
+                                          (display tmp) (newline)
+
+                                          (with-output-to-file (string-append tmp "/makefile")
+                                            (lambda ()
+                                              (display "all:\n")
+                                              (display "\tcd lib;make\n")
+                                              (display (string-append "\t" "gcc " (string-join (map path-strip-directory c-files) " ") " -Ilib -Llib -lgambit -lm\n"))))))
 
                                     (if exe?
                                         (and (##pair? rev-obj-files)
