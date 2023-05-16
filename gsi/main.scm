@@ -774,20 +774,20 @@ usage-end
                                         (let* ((tmp (create-temporary-directory "/tmp/bundle."))
                                                (c-files (map car rev-gen-files))
                                                (command-output (shell-command (string-append "cp -r " (path-expand "~~bundle") " " tmp "/lib"))))
-                                          (display rev-gen-files) (newline)
-                                          (display command-output) (newline)
 
                                           (for-each
                                            (lambda (file)
                                              (copy-file file (string-append tmp "/" (path-strip-directory file))))
                                            c-files)
-                                          (display tmp) (newline)
 
                                           (with-output-to-file (string-append tmp "/makefile")
                                             (lambda ()
                                               (display "all:\n")
                                               (display "\tcd lib;make\n")
-                                              (display (string-append "\t" "gcc " (string-join (map path-strip-directory c-files) " ") " -Ilib -Llib -lgambit -lm\n"))))))
+                                              (display (string-append "\t" "gcc " (string-join (map path-strip-directory c-files) " ") " -Ilib -Llib -lgambit -lm\n"))))
+                                          (for-each delete-file c-files)
+                                          (display "bundle: ")
+                                          (display tmp) (newline)))
 
                                     (if exe?
                                         (and (##pair? rev-obj-files)

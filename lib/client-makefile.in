@@ -187,6 +187,13 @@ phase3: core
 
 phase4:
 
+preclean:
+	rm -f $(shell find -name "*.scm")
+	rm -f $(shell find -name "*.o")
+	rm -f $(shell find -name "*.a")
+	rm -f $(shell find -name "*.js")
+	rm -r _geiser _hamt _http guide _pkg _uri _tar _define-library _digest _git _match _six _test _zlib termite _base64
+
 $(LIBRARY): $(LIBRARY_OBJECTS_IN_COMPILE_ORDER)
 	rm -f "$(LIBRARY)$(LIB_VERSION_SUFFIX)" "$(LIBRARY)$(LIB_MAJOR_VERSION_SUFFIX)" "$(LIBRARY)"
 	@MAKE_LIBRARY@
@@ -242,12 +249,17 @@ _kernel@obj@: _kernel.c $(STAMP_H) os.h os_setup.h os_base.h os_time.h os_shell.
 _system@obj@: _system.c
 	@BUILD_OBJ@ -D___LIBRARY
 
-_num.c: gambit/random/random.scm gambit/random/random\#.scm
+# sinon, le bundle fonctionne pas
+#
+# _num.c: gambit/random/random.scm gambit/random/random\#.scm
 
 _num@obj@: _num.c mem.h
 	@BUILD_OBJ@ -D___LIBRARY
 
-_std.c: gambit/boolean/boolean.scm gambit/boolean/boolean\#.scm gambit/symkey/symkey.scm gambit/symkey/symkey\#.scm gambit/char/char.scm gambit/char/char\#.scm gambit/list/list.scm gambit/list/list\#.scm gambit/vector/vector.scm gambit/vector/vector\#.scm gambit/string/string.scm gambit/string/string\#.scm gambit/procedure/procedure.scm gambit/procedure/procedure\#.scm gambit/promise/promise.scm gambit/promise/promise\#.scm gambit/parameter/parameter.scm gambit/parameter/parameter\#.scm
+
+# bundle
+#
+# _std.c: gambit/boolean/boolean.scm gambit/boolean/boolean\#.scm gambit/symkey/symkey.scm gambit/symkey/symkey\#.scm gambit/char/char.scm gambit/char/char\#.scm gambit/list/list.scm gambit/list/list\#.scm gambit/vector/vector.scm gambit/vector/vector\#.scm gambit/string/string.scm gambit/string/string\#.scm gambit/procedure/procedure.scm gambit/procedure/procedure\#.scm gambit/promise/promise.scm gambit/promise/promise\#.scm gambit/parameter/parameter.scm gambit/parameter/parameter\#.scm
 _std@obj@: _std.c os.h
 	@BUILD_OBJ@ -D___LIBRARY
 
@@ -260,7 +272,10 @@ _module@obj@: _module.c
 _io@obj@: _io.c
 	@BUILD_OBJ@ -D___LIBRARY
 
-_nonstd.c: gambit/env-vars/env-vars.scm gambit/env-vars/env-vars\#.scm gambit/process/process.scm gambit/process/process\#.scm
+# bundle
+#
+# _nonstd.c: gambit/env-vars/env-vars.scm gambit/env-vars/env-vars\#.scm gambit/process/process.scm gambit/process/process\#.scm
+
 _nonstd@obj@: _nonstd.c
 	@BUILD_OBJ@ -D___LIBRARY
 
