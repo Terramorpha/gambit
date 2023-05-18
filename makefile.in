@@ -107,7 +107,8 @@ all: core
 	$(MAKE) modules  # comment this line during development to avoid building the modules on every change
 
 bundle:
-	cd lib;make GAMBIT_LIB_C
+	cd include; make
+	cd lib; make GAMBIT_LIB_C
 	cp -r ./lib ./bundle
 	cp include/stamp.h ./bundle/
 	cp include/stamp.h ./bundle/stamp-release.h
