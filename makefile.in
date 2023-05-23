@@ -121,7 +121,7 @@ bundle:
 
 core:
 
-core-pre: gsc-boot@exe@ bundle
+core-pre: gsc-boot@exe@
 	$(MAKE) stamp
 	@if echo "MAKEFLAGS: $(MAKEFLAGS)" | fgrep -e "--jobserver-fds="; then \
 	  $(MAKE) phases; \
@@ -399,7 +399,7 @@ install-pre:
 	  exit 1; \
 	fi
 
-install-post: core
+install-post: core bundle
 	if test "@ENABLE_MULTIPLE_VERSIONS@" = "yes"; then \
 	  if test "@bat@" = ""; then \
 	    $(srcdirpfx)./mkidirs "$(DESTDIR)$(prefix)"; \
@@ -408,6 +408,8 @@ install-post: core
 	    (cd "$(DESTDIR)$(prefix)/.." && $(LN_S) $(PACKAGE_VERSION) current); \
 	  fi; \
 	fi
+
+
 
 uninstall-pre:
 

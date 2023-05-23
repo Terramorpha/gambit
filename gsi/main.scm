@@ -467,6 +467,10 @@ usage-end
                               (##cons (##cons file flags)
                                       rev-gen-files)))
 
+                      (define (add-gen-file-at-end file)
+                        (set! rev-gen-files
+                          (append rev-gen-files (list (##cons file flags)))))
+
                       (define (add-obj-file obj-file)
                         (set! rev-obj-files
                               (##cons obj-file
@@ -714,6 +718,76 @@ usage-end
                                             (else
                                              (##cadr x))))))
 
+                              (define (read-dependencies filename.c)
+                                (with-input-from-file filename.c
+                                  (lambda ()
+                                    (read-line)
+                                    (read-line)
+                                    (list-ref (read) 4))))
+
+                              (define (more-recent path-a path-b)
+                                (and (file-exists? path-a)
+                                     (file-exists? path-b)
+                                     (let* ((a-info (file-info path-a))
+                                            (b-info (file-info path-b))
+                                            (a-mtime (file-info-last-modification-time
+                                                      a-info))
+                                            (b-mtime (file-info-last-modification-time
+                                                      b-info)))
+
+
+                                       (> (time->seconds a-mtime)
+                                          (time->seconds b-mtime)))))
+
+                              (define (difference sa sb)
+                                (if (pair? sb)
+                                    (filter (lambda (x) (not (member x sb)))
+                                            sa)
+                                    sa))
+
+                              (if bundle?
+
+                                  (let loop ((modules-to-compile (apply append (map (lambda (thing) (read-dependencies (car thing))) rev-gen-files)))
+                                             (modules-we-compiled '()))
+                                    (let ((new-modules
+                                           (map
+                                            (lambda (a-module-name)
+                                              (let* ((mod (##search-module (##parse-module-ref a-module-name)))
+                                                     (mod-dir (vector-ref mod 0))
+                                                     (mod-filename-noext (vector-ref mod 1))
+                                                     (mod-path (vector-ref mod 3))
+                                                     (bsp (##module-build-subdir-path mod-dir
+                                                                                      mod-filename-noext
+                                                                                      'C)))
+                                                (unless (file-exists? bsp)
+                                                  (create-directory bsp))
+
+                                                '((mod-dir            (##vector-ref mod-info 0))
+                                                  (mod-filename-noext (##vector-ref mod-info 1))
+                                                  (ext                (##vector-ref mod-info 2))
+                                                  (mod-path           (##vector-ref mod-info 3))
+                                                  (port               (##vector-ref mod-info 4))
+                                                  (root               (##vector-ref mod-info 5))
+                                                  (path               (##vector-ref mod-info 6)))
+
+                                                (let* ((target-file
+                                                        (string-append bsp "/" mod-filename-noext ".c")))
+
+                                                  (unless (more-recent target-file mod-path)
+                                                    (pp (list "compiling " mod-path))
+                                                    (add-gen-file-at-end
+                                                     (do-compile-file-to-target
+                                                      mod-path
+                                                      options
+                                                      target-file))))
+                                                a-module-name))
+
+                                            (difference modules-to-compile modules-we-compiled))))
+
+                                      (if (not (pair? new-modules))
+                                          (loop (union modules-to-compile new-modules)
+                                                (union modules-to-compile modules-we-compiled))))))
+
                               (if (or link? bundle? exe?)
 
                                   (let ((gen-files
@@ -772,20 +846,29 @@ usage-end
 
                                     (if bundle?
                                         (let* ((tmp (create-temporary-directory "/tmp/bundle."))
-                                               (c-files (map car rev-gen-files))
-                                               (command-output (shell-command (string-append "cp -r " (path-expand "~~bundle") " " tmp "/lib"))))
+                                               (c-files (map car (reverse rev-gen-files)))
+                                               (command-output (shell-command
+                                                                (string-append "cp -r " (path-expand "~~bundle") " " tmp "/lib"))))
 
                                           (for-each
                                            (lambda (file)
-                                             (copy-file file (string-append tmp "/" (path-strip-directory file))))
+                                             (copy-file 
+                                              file
+                                              (string-append tmp "/" (path-strip-directory file))))
                                            c-files)
 
                                           (with-output-to-file (string-append tmp "/makefile")
                                             (lambda ()
                                               (display "all:\n")
-                                              (display "\tcd lib;make\n")
-                                              (display (string-append "\t" "gcc " (string-join (map path-strip-directory c-files) " ") " -Ilib -Llib -lgambit -lm\n"))))
-                                          (for-each delete-file c-files)
+                                              (display "\tcd lib && $(MAKE)\n")
+                                              (display
+                                               (string-append 
+                                                "\t"
+                                                "gcc "
+                                                (string-join (map path-strip-directory c-files) " ")
+                                                " -Ilib -Llib -lgambit -lm\n"))))
+                                          ;; sinon, on perd les artéfacts
+                                          ;; (for-each add-tmp-file (map car rev-gen-files))
                                           (display "bundle: ")
                                           (display tmp) (newline)))
 
