@@ -249,6 +249,20 @@
               (c-intf (vector-ref v2 2))
               (parsed-program (normalize-program lst)))
 
+         (let ((defined-names (map var-name (map def-var lst)))
+               (used-names (map var-name (env-vars-ref env))))
+
+           (let ((imported (filter (lambda (elem) (not (member elem defined-names))) used-names))
+                 (exported (filter (lambda (elem) (member elem defined-names)) used-names)))
+
+
+             (table-set! (**macro-compilation-ctx-meta-info comp-ctx)
+                         'imported
+                         imported)
+             (table-set! (**macro-compilation-ctx-meta-info comp-ctx)
+                         'exported
+                         exported)))
+
          (inner parsed-program
                 env
                 root
