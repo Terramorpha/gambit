@@ -15,6 +15,8 @@
 ;; clo(opnd,n)  index_in_operand_table*8 + 4
 ;; obj(x)       index_in_operand_table*8 + 5
 
+(namespace ("c#" enter-opnd *opnd-table*))
+
 ;; Locations:
 ;; ---------
 

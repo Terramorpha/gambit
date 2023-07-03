@@ -18,6 +18,8 @@
 (##include "_hostadt.scm")
 )
 
+(namespace ("ptree#" ptree.begin!))
+
 ;;;----------------------------------------------------------------------------
 ;;
 ;; Parse tree manipulation module: (part 1)

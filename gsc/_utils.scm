@@ -6,6 +6,12 @@
 
 (include "fixnum.scm")
 
+(namespace ("utils#"
+            with-exception-handling
+            keep
+            varset-member?
+            varset-union))
+
 (include-adt "_envadt.scm")
 (include-adt "_gvmadt.scm")
 (include-adt "_ptreeadt.scm")

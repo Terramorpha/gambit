@@ -11,6 +11,12 @@
 (include-adt "_ptreeadt.scm")
 (include-adt "_sourceadt.scm")
 
+(namespace ("back#"
+            target-options
+            target-get
+            default-target
+            frame-constraints-reserve))
+
 ;;;----------------------------------------------------------------------------
 
 ;;;; Interface to back ends

@@ -19,6 +19,94 @@
 (##include "../gsc/_hostadt.scm")
 )
 
+(namespace ("utils#"
+            with-exception-handling
+            keep
+            varset-union
+            varset-member?
+            compiler-internal-error
+            varset->list
+            varset-adjoin
+            varset-union-multi
+            pos-in-list
+            list->varset
+            ptset->list
+            sort-list
+            varset-size
+            lset-difference)
+           ("back#"
+            target-options
+            target-get
+            default-target
+            compiler-error
+            frame-constraints-reserve
+            target.file-extensions
+            target.frame-constraints
+            target.proc-result
+            target.nb-regs
+            frame-constraints-align)
+           ("ptree1#"
+            bound-free-variables
+            ptree.begin!
+            conj-pre
+            conj-alt
+            disj-pre
+            disj-alt
+            tst-pre
+            tst-con
+            tst-alt
+            prc-body
+            app->specialized-proc
+            optimize-dead-local-variables?
+            intrs-enabled?
+            generative-lambda?)
+           ("ptree2#"
+            normalize-program
+            scheme-id->c-id
+            c-proc-c-name)
+           ("gvm#"
+            proc-obj-inlinable?
+            make-label-simple
+            virtual.begin!
+            env.begin!
+            make-jump
+            make-close
+            make-closure-parms
+            make-switch
+            make-switch-case
+            make-bb
+            make-label-simple
+            make-label-task-entry
+            make-label-task-return
+            make-frame
+            make-comment
+            make-ifjump
+            bb-non-branch-instrs
+            bb-label-instr
+            bbs-new-lbl!
+            return-addr-reg
+            gvm-instr-comment
+            label-entry-keys
+            pcontext-fs
+            pcontext-map
+            comment-put!)
+           ("env#"
+            make-temp-var
+            ret-var-set
+            env-vars-ref
+            empty-var)
+           ("parms#"
+            c-id-prefix
+            **identity-proc-obj
+            **compilation-meta-info-add!
+            **compilation-module-ref-set!
+            **in-new-compilation-ctx
+            **macro-compilation-ctx-supply-modules
+            **macro-compilation-ctx-supply-modules-set!)
+           ("source#"
+            string->canonical-symbol
+            read-source))
+
 ;;;----------------------------------------------------------------------------
 
 ;;;; Front-end of GAMBIT compiler
@@ -275,6 +363,9 @@
                        (cons val (map-filter f (cdr lst)))
                        (map-filter f (cdr lst))))
                  lst))
+
+           (pp (list 'env env))
+
 
            (let ((namespace-to-undefined-names
                   (let ((table (make-table)))

@@ -14,6 +14,8 @@
 ;;  source    source corresponding to this node
 ;;  stamp     integer to identify node
 
+(namespace ("c#" next-node-stamp))
+
 (define (node-parent x)          (vector-ref x 1))
 (define (node-children x)        (vector-ref x 2))
 (define (node-fv x)              (vector-ref x 3))

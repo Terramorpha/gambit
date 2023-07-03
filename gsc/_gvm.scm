@@ -11,6 +11,8 @@
 (include-adt "_ptreeadt.scm")
 (include-adt "_sourceadt.scm")
 
+(namespace ("gvm#" proc-obj-inlinable?))
+
 ;;;----------------------------------------------------------------------------
 ;;
 ;; Gambit virtual machine abstraction module:

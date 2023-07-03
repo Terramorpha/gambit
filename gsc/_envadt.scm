@@ -2,6 +2,8 @@
 
 ;;;; Environment manipulation
 
+(namespace ("c#" next-var-stamp))
+
 ;; structure that represents variables:
 
 (define (make-var
