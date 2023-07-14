@@ -1,0 +1,16 @@
+(##namespace
+ ("env#"
+  closure-env-var
+  define-namable-decl
+  empty-var
+  env-externals-ref
+  env-frame
+  env-global-variables
+  env-lookup-global-var
+  env-vars-ref
+  env.end!
+  make-global-environment
+  make-temp-var
+  ret-var
+  ret-var-set
+  ))

@@ -13,6 +13,8 @@
 (include-adt "_sourceadt.scm")
 (include-adt "_univadt.scm")
 
+(include "_t-univ-3#.scm")
+
 ;;----------------------------------------------------------------------------
 
 (define (univ-defs fields methods classes inits all)

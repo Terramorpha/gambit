@@ -1,0 +1,12 @@
+(##namespace
+ ("host#"
+  **macro-compilation-ctx-demand-modules
+  **macro-compilation-ctx-meta-info
+  **meta-info->alist
+  false-object
+  false-object?
+  pp-expression
+  scheme-global-var
+  scheme-global-var-define!
+  void-object
+  ))

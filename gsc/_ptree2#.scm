@@ -1,0 +1,14 @@
+(##namespace
+ ("ptree2#"
+  c-intf-decls
+  c-intf-inits
+  c-intf-procs
+  c-proc-arity
+  c-proc-body
+  c-proc-c-name
+  c-proc-scheme-name
+  dead-end-calls?
+  normalize-program
+  parse-tree->expression
+  scheme-id->c-id
+  ))

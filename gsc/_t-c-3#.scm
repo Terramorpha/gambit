@@ -1,0 +1,12 @@
+(##namespace
+ ("t-c-3#"
+  targ-object-type
+  targ-tag-bits
+  targ-frame-alignment
+  targ-min-word-size
+  targ-frame-reserve
+  targ-inexact-+0
+  targ-inexact-+1
+  targ-inexact--1
+  targ-inexact-+1/2
+  ))

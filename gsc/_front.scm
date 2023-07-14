@@ -19,6 +19,7 @@
 (##include "../gsc/_hostadt.scm")
 )
 
+(include "_front#.scm")
 (include "_utils#.scm")
 (include "_env#.scm")
 (include "_gvm#.scm")

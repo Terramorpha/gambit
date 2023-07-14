@@ -1,0 +1,12 @@
+(##namespace
+ ("t-c-1#"
+  targ-module-rd-res
+  targ-get-prim-info
+  targ-use-glo
+  targ-nb-gvm-regs
+  targ-jump-info
+  targ-s8vector-space
+  targ-string-space
+  targ-symbol-space
+  targ-keyword-space
+  ))

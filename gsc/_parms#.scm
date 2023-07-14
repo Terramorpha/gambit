@@ -1,0 +1,15 @@
+(##namespace
+ ("parms#"
+  **c-declare-sym
+  **c-define-sym
+  **c-define-type-sym
+  **compilation-meta-info-add!
+  **compilation-module-ref-set!
+  **identity-proc-obj
+  **in-new-compilation-ctx
+  **macro-compilation-ctx-supply-modules
+  **macro-compilation-ctx-supply-modules-set!
+  c-id-prefix
+  compiler-version
+  compiler-version-string
+  ))

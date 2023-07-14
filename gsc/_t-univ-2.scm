@@ -13,6 +13,20 @@
 (include-adt "_sourceadt.scm")
 (include-adt "_univadt.scm")
 
+(include "_t-univ-1#.scm")
+(include "_t-univ-2#.scm")
+(include "_t-univ-3#.scm")
+(include "_t-univ-4#.scm")
+
+(include "_front#.scm")
+(include "_ptree1#.scm")
+(include "_ptree2#.scm")
+(include "_utils#.scm")
+(include "_t-c-3#.scm")
+(include "_t-x86#.scm")
+(include "_parms#.scm")
+
+
 ;;----------------------------------------------------------------------------
 
 (define (univ-class
