@@ -11,11 +11,10 @@
 (include-adt "_ptreeadt.scm")
 (include-adt "_sourceadt.scm")
 
-(namespace ("back#"
-            target-options
-            target-get
-            default-target
-            frame-constraints-reserve))
+(include "_back#.scm")
+(include "_utils#.scm")
+(include "_source#.scm")
+(include "_env#.scm")
 
 ;;;----------------------------------------------------------------------------
 

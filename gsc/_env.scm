@@ -11,6 +11,8 @@
 (include-adt "_ptreeadt.scm")
 (include-adt "_sourceadt.scm")
 
+(include "_env#.scm")
+
 ;;;----------------------------------------------------------------------------
 
 ;;;; Environment manipulation and declaration handling module

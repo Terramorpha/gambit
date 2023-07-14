@@ -5,6 +5,10 @@
 ;;; Copyright (c) 1994-2022 by Marc Feeley, All Rights Reserved.
 
 (include "generic.scm")
+(include "_ptree1#.scm")
+(include "_env#.scm")
+(include "_back#.scm")
+
 
 ;;;----------------------------------------------------------------------------
 

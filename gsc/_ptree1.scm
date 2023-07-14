@@ -6,6 +6,8 @@
 
 (include "fixnum.scm")
 
+(include "_ptree1#.scm")
+
 (include-adt "_envadt.scm")
 (include-adt "_gvmadt.scm")
 (include     "_ptreeadt.scm")
@@ -17,8 +19,6 @@
 (##include "_utilsadt.scm")
 (##include "_hostadt.scm")
 )
-
-(namespace ("ptree#" ptree.begin!))
 
 ;;;----------------------------------------------------------------------------
 ;;

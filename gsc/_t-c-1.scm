@@ -17,6 +17,9 @@
 (##include "_hostadt.scm")
 )
 
+(include "_t-c-1#.scm")
+(include "_utils#.scm")
+
 ;;;----------------------------------------------------------------------------
 ;;
 ;; Back end for C language (part 1)

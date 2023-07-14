@@ -18,6 +18,8 @@
 (##include "../gsc/_hostadt.scm")
 )
 
+(include "_ptree1#.scm")
+
 ;;;----------------------------------------------------------------------------
 ;;
 ;; Parse tree manipulation module: (part 2)

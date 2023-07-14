@@ -8,6 +8,8 @@
 
 (include "fixnum.scm")
 
+(include "_host#.scm")
+
 ;;;============================================================================
 
 ;; Host system interface:

@@ -18,6 +18,14 @@
 (##include "../gsc/_hostadt.scm")
 )
 
+(include "_t-c-1#.scm")
+(include "_parms#.scm")
+(include "_host#.scm")
+(include "_gvm#.scm")
+(include "_utils#.scm")
+(include "_back#.scm")
+
+
 ;;;----------------------------------------------------------------------------
 ;;
 ;; Back end for C language (part 2)
