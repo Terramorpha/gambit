@@ -3,6 +3,11 @@
   apply-loc
   apply-opnds
   bb-label-instr
+  bb-branch-instr
+  bb-lbl-num
+  bb-precedents
+  bb-lbl-num->bb
+  lbl-num->bb
   bb-non-branch-instrs
   bb-non-branch-instrs-set!
   bb-put-branch!
@@ -17,6 +22,8 @@
   copy-loc
   copy-opnd
   env.begin!
+  frame-size
+  frame-slots
   gvm-instr-comment
   gvm-instr-frame
   gvm-instr-type
@@ -84,4 +91,40 @@
   virtual.dump-dg
   virtual.dump-gvm
   virtual.end!
+  apply-prim
+  bbs?
+  bbs->code-list
+  bbs-entry-lbl-num
+  bbs-next-lbl-num
+  closure-parms-lbl
+  code-bb
+  code-slots-needed
+  debug-info-add!
+  debug-info-generate
+  frame-closed
+  frame-live?
+  frame-regs
+  ifjump-false
+  ifjump-poll?
+  ifjump-test
+  ifjump-true
+  jump-nb-args
+  jump-poll?
+  jump-ret
+  jump-safe?
+  label-entry-closed?
+  label-entry-nb-parms
+  label-entry-rest?
+  label-lbl-num
+  make-debug-info-state
+  proc-obj-inline
+  proc-obj-test
+  proc-obj-testable?-set!
+  proc-obj-test-set!
+  switch-default
+  switch-poll?
+
+
+
+
   ))

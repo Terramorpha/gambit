@@ -1,9 +1,11 @@
 (##namespace
  ("t-univ-1#"
+  ctx-globals-used
   ctx-imports
   ctx-inits
   ctx-rtlib-features-used
   ctx-rtlib-features-used-set!
+  ctx-target
   gvm-proc-use
   gvm-state-current-thread
   gvm-state-glo-use
@@ -15,11 +17,28 @@
   resource-set-add!
   resource-set-pop
   resource-set-stack
+  tt
+  univ-absent-representation
   univ-add-module-import
+  univ-add-module-init
+  univ-always-return-jump?
   univ-array-constructor
+  univ-bb-prefix
+  univ-boolean-representation
+  univ-box
+  univ-box?
+  univ-capitalized-bb-prefix
+  univ-emit-cast*-scmobj
+  univ-char-representation
+  univ-clo-slots
+  univ-compactness>=?
+  univ-constant
+  univ-deleted-representation
   univ-denv-local
+  univ-display
   univ-emit-!=
   univ-emit-&&
+  univ-emit-*
   univ-emit-+
   univ-emit--
   univ-emit-/
@@ -38,16 +57,21 @@
   univ-emit-array-push!
   univ-emit-array-shrink!
   univ-emit-array-shrink-possibly-copy!
+  univ-emit-array?
   univ-emit-assign
+  univ-emit-assign-expr
   univ-emit-attribute-exists?
   univ-emit-bitand
   univ-emit-bitior
   univ-emit-bitnot
   univ-emit-bitxor
   univ-emit-call-with-arg-array
+  univ-emit-cast
   univ-emit-cast*
+  univ-emit-cast*-jumpable
   univ-emit-concat
   univ-emit-copy-array-to-extensible-array
+  univ-emit-downcast*
   univ-emit-downupcast*
   univ-emit-eq?
   univ-emit-expr-statement
@@ -56,6 +80,7 @@
   univ-emit-extensible-subarray
   univ-emit-getglo
   univ-emit-getnargs
+  univ-emit-getopnds
   univ-emit-getpeps
   univ-emit-getreg
   univ-emit-getstk
@@ -66,38 +91,42 @@
   univ-emit-if-expr
   univ-emit-if-instanceof
   univ-emit-inc-by
+  univ-emit-indent
   univ-emit-local-var
   univ-emit-make-array
-  univ-emit-rts-method
-  univ-emit-rts-class-use
   univ-emit-map
   univ-emit-move-array-to-array
   univ-emit-new-array
   univ-emit-not
   univ-emit-obj
+  univ-emit-obj*
   univ-emit-or
-  univ-emit-*
+  univ-emit-parens
+  univ-emit-parens-php
+  univ-emit-pop
+  univ-emit-prefix
+  univ-emit-prefix-class
+  univ-emit-prop-index
+  univ-emit-prop-index-exists?
+  univ-emit-prop-index-or-null
+  univ-emit-push
   univ-emit-rts-class
+  univ-emit-rts-class-ref
+  univ-emit-rts-class-use
   univ-emit-rts-class-use
   univ-emit-rts-field-use
+  univ-emit-rts-field-use
   univ-emit-rts-jumpable-use
+  univ-emit-rts-method
   univ-emit-rts-method
   univ-emit-rts-method-ref
   univ-emit-rts-method-use
   univ-emit-rts-method-use
-  univ-emit-parens
-  univ-emit-pop
-  univ-emit-rts-field-use
-  univ-emit-prefix
-  univ-emit-prefix-class
-  univ-emit-prop-index
-  univ-emit-push
   univ-emit-setglo
   univ-emit-setnargs
   univ-emit-setreg
   univ-emit-subarray
   univ-emit-this-mod-jumpable
-  univ-emit-cast*-jumpable
   univ-emit-tostr
   univ-emit-try-catch
   univ-emit-unalias
@@ -105,35 +134,62 @@
   univ-emit-var-declaration
   univ-emit-while
   univ-env-name-val
+  univ-eof-representation
   univ-field-rename
   univ-fixnum-max
   univ-fixnum-min
   univ-fixnum-representation
+  univ-flonum-representation
   univ-foldr-range
+  univ-frame-representation
+  univ-gensym
   univ-glo-use
+  univ-java-pre7?
+  univ-js-define-globals-using-assignment
+  univ-key-representation
+  univ-keyword-representation
   univ-max-memoized-fixnum
   univ-mdigit-base
   univ-mdigit-base-minus-1
   univ-mdigit-width
   univ-min-memoized-fixnum
+  univ-mod-jumpable-is-field?
+  univ-module-representation
   univ-nb-arg-regs
+  univ-never-return-jump?
+  univ-null-representation
+  univ-num-array-constant
+  univ-obj-use
+  univ-optional-representation
+  univ-php-pre53?
   univ-pop-args-to-regs
   univ-pop-args-to-vars
+  univ-prim-info*
   univ-procedure-representation
   univ-push-args
+  univ-python-pre3?
+  univ-rest-representation
   univ-rts-field-low-level-name
   univ-rts-method-low-level-name
+  univ-separated-list
   univ-single-line-comment-prefix
   univ-stack-resizable?
   univ-stk-slot-from-tos
   univ-string-representation
+  univ-structure-representation
+  univ-symbol-representation
   univ-thread-cont-slot
   univ-thread-denv-cache1-slot
   univ-thread-denv-cache2-slot
   univ-thread-denv-cache3-slot
   univ-thread-denv-slot
   univ-tostr-method-name
+  univ-unbound-representation
+  univ-unbox
+  univ-unused-representation
   univ-use-rtlib
+  univ-values-representation
   univ-vector-representation
-  univ-flonum-representation
+  univ-void-representation
+  with-new-resources-used
   ))

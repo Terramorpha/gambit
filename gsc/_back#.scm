@@ -6,6 +6,7 @@
   default-target
   frame-constraints-align
   frame-constraints-reserve
+  target-name
   target-get
   target-options
   target-select!
@@ -19,4 +20,30 @@
   target.prim-info
   target.proc-result
   target.switch-testable?
+  make-target
+  make-frame-constraints
+  make-prim-proc-table
+  prim-proc-add!
+  get-option
+  prim-proc-info
+  target-add
+  target-begin!-set!
+  target-compactness-set!
+  target-dump-set!
+  target-end!-set!
+  target-eq-testable?-set!
+  target-frame-constraints-set!
+  target-link-info-set!
+  target-link-set!
+  target-nb-regs-set!
+  target-nb-regs
+  target-nb-arg-regs
+  target-nb-arg-regs-set!
+  target-compactness
+  target-object-type-set!
+  target-prim-info-set!
+  target-proc-result-set!
+  target-switch-testable?-set!
+
+
   ))

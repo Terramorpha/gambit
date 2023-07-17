@@ -9,4 +9,15 @@
   targ-inexact-+1
   targ-inexact--1
   targ-inexact-+1/2
+  targ-align-frame
+  targ-align-frame-without-reserve
+  targ-build-gc-map
+  targ-build-gc-map-all-live
+  targ-fixnum32?
+  targ-hash
+  targ-max-adigit-width
+  targ-obj-subtype
+  targ-obj-type
+  targ-unusual-float?
+  targ-inexact-+2
   ))

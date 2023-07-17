@@ -11,4 +11,6 @@
   normalize-program
   parse-tree->expression
   scheme-id->c-id
+  nonneg-integer->c-id
+  string->c-id
   ))

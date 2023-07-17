@@ -46,4 +46,5 @@
   tst-con
   tst-pre
   warnings?
+  debug?
   ))

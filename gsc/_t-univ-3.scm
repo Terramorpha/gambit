@@ -14,6 +14,15 @@
 (include-adt "_univadt.scm")
 
 (include "_t-univ-3#.scm")
+(include "_gvm#.scm")
+(include "_ptree1#.scm")
+(include "_back#.scm")
+(include "_source#.scm")
+(include "_t-c-3#.scm")
+(include "_t-univ-1#.scm")
+(include "_t-univ-2#.scm")
+(include "_t-univ-4#.scm")
+(include "_utils#.scm")
 
 ;;----------------------------------------------------------------------------
 

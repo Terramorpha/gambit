@@ -1,0 +1,39 @@
+(##namespace
+ ("t-univ-2#"
+  univ-class
+  univ-class-class-classes
+  univ-class-class-fields
+  univ-class-class-methods
+  univ-class-constructor
+  univ-class-extends
+  univ-class-inits
+  univ-class-instance-fields
+  univ-class-instance-methods
+  univ-class-properties
+  univ-class-root-name
+  univ-decl-properties
+  univ-def-kind
+  univ-field-inherited?
+  univ-field-init
+  univ-field-name
+  univ-field-properties
+  univ-field-type
+  univ-method
+  univ-field
+  univ-method-attribs
+  univ-method-body
+  univ-method-modifier
+  univ-method-name
+  univ-method-params
+  univ-method-result-type
+  univ-method?
+
+  univ-entry-defs
+  univ-link-info-prefix
+  univ-module-footer
+  univ-module-header
+  univ-rtlib-defs
+  univ-rtlib-init
+  univ-source-file-footer
+
+  ))

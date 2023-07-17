@@ -9,4 +9,31 @@
   targ-string-space
   targ-symbol-space
   targ-keyword-space
+  targ-cell-set!
+  targ-c-id-glo
+  targ-c-id-glo2
+  targ-closure-space
+  targ-continuation-space
+  targ-cpxnum-space
+  targ-c-unsigned-long
+  targ-delay-promise-space
+  targ-flonum-space
+  targ-frame-reserve
+  targ-info-port
+  targ-label-info
+  targ-lbl-alloc
+  targ-make-cell
+  targ-max-small-allocation
+  targ-module-wr-res
+  targ-msection-fudge
+  targ-nb-arg-regs
+  targ-pair-space
+  targ-ratnum-space
+  targ-sharing-table
+  targ-track-scheme-option?
+  targ-unique-name
+  targ-use-obj
+  targ-use-prc
+  targ-vector-space
+  targ-will-space
   ))

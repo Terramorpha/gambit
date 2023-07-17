@@ -2,4 +2,10 @@
  ("t-univ-4#"
   univ-end-of-cont-marker
   univ-ctrlpt-reference-to-ctrlpt
+  univ-unstringify-method
+  univ-ctrlpt-reference
+  univ-ctrlpt-reference-type
+  univ-method-reference
+  univ-parent-entry-point-has-null-parent?
+  univ-prm-name
   ))

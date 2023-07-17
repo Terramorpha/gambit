@@ -31,4 +31,12 @@
   with-exception-handling
   map-index
   queue->list
+  base92-encode
+  compiler-user-error
+  queue-empty
+  queue-empty?
+  queue-get!
+  queue-put!
+  stretchable-vector-length
+  stretchable-vector->list
   ))

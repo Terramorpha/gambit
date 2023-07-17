@@ -6,6 +6,19 @@
 
 (include "fixnum.scm")
 
+(include "_prims#.scm")
+(include "_back#.scm")
+(include "_gvm#.scm")
+(include "_host#.scm")
+(include "_parms#.scm")
+(include "_ptree1#.scm")
+(include "_ptree2#.scm")
+(include "_ptreeadt#.scm")
+(include "_t-c-3#.scm")
+(include "_t-univ-3#.scm")
+(include "_t-univ-4#.scm")
+
+
 ;;;----------------------------------------------------------------------------
 ;;
 ;; Primitive procedure database:

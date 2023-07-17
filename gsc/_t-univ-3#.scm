@@ -124,6 +124,38 @@
   univ-emit-vect-box
   univ-emit-vector-box
   univ-emit-vector?-inline
+
+  univ-defs-classes
+  univ-defs-fields
+  univ-defs-inits
+  univ-defs-methods
+  univ-emit-apply
+  univ-emit-boolean-obj
+  univ-emit-box
+  univ-emit-char-obj
+  univ-emit-closure-ref
+  univ-emit-closure-set!
+  univ-emit-cpxnum-make
+  univ-emit-decl
+  univ-emit-defs
+  univ-emit-deleted
+  univ-emit-float-fromint
+  univ-emit-key
+  univ-emit-keyword-obj
+  univ-emit-num-of-type
+  univ-emit-optional
+  univ-emit-poll-or-continue
+  univ-emit-ratnum-make
+  univ-emit-rest
+  univ-emit-return-poll
+  univ-emit-string-obj
+  univ-emit-symbol-obj
+  univ-emit-unbound2
+  univ-emit-unused
+  univ-rts-type-alias
+  univ-set-ctrlpt-attrib
+  univ-use-ctrlpt-init?
+
   univ-emit-vector-length
   univ-emit-vector-ref
   univ-emit-vector-set!
