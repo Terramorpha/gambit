@@ -249,6 +249,16 @@
               (c-intf (vector-ref v2 2))
               (parsed-program (normalize-program lst)))
 
+
+         (let* ((macros (env-macros-ref env))
+                (macros-with-src (keep (lambda (pair) (**macro-descr-expander-src (cdr pair)))
+                                       macros))
+                (macros-srcs-alist (map (lambda (pair) (cons (car pair)
+                                                        (source->expression (**macro-descr-expander-src (cdr pair)))))
+                                        macros-with-src)))
+           (table-set! (**macro-compilation-ctx-meta-info comp-ctx) 'macros
+                       macros-srcs-alist))
+
          (let* ((externals (env-externals-ref env))
                 (name->ref-alist (map (lambda (var) (cons
                                                 (var-name var)
